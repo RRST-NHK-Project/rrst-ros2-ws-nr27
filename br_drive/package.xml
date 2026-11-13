@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>br_drive</name>
+  <version>0.0.0</version>
+  <description>独立ステアリング1ユニット(操舵DM2325 + 駆動DM3519)をPS4で動かす制御ノード(infinite_ctrl_node)</description>
+  <maintainer email="vnfaf69349@yahoo.co.jp">Kaho-YAMAMOTO</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <exec_depend>joy</exec_depend>
+  <!-- 実行時に damiao_driver_node(damiao/motorN/cmd・state)が必要 -->
+  <exec_depend>damiao_ctrl</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
