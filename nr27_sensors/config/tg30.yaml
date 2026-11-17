@@ -1,0 +1,32 @@
+# YDLIDAR TG30 の設定。ドライバ: ydlidar_ros2_driver (params/TG.yaml が元)
+# frame_id は launch の引数で上書きされる (既定 tg30_link)。
+/**:
+  ros__parameters:
+    port: /dev/tg30        # udev のシンボリックリンク (udev/99-nr27-lidar.rules)
+    frame_id: tg30_link
+    ignore_array: ""
+    baudrate: 512000
+    lidar_type: 0
+    device_type: 0
+    sample_rate: 20
+    abnormal_check_count: 4
+    fixed_resolution: true
+    reversion: true
+    inverted: true
+    auto_reconnect: true
+    isSingleChannel: false
+    intensity: false
+    support_motor_dtr: false
+    angle_max: 180.0
+    angle_min: -180.0
+    range_max: 30.0        # TG30 の仕様 (0.05〜30 m)
+    range_min: 0.05
+    frequency: 10.0
+    invalid_range_is_inf: false
+    # 以下はドライバが「既定値なしで宣言」するので、yaml に無いと起動時に異常終了する
+    # (Jazzy は型付きパラメータの未設定を許さない)。TG30 では使わない値 (GS 用)。
+    intensity_bit: 0
+    debug: false
+    m1_mode: 0
+    m2_mode: 0
+    m3_mode: 1

@@ -1,0 +1,10 @@
+# base_link から見た、各LiDARの取り付け位置 [m] と向き [rad]。
+# 【仮置き】実機で測って合わせること。x=前、y=左、z=上、yaw=反時計回り。
+parent_frame: base_link
+
+ld19:
+  {x: 0.0, y: 0.0, z: 0.18, roll: 0.0, pitch: 0.0, yaw: 0.0}
+tg30:
+  {x: 0.0, y: 0.0, z: 0.18, roll: 0.0, pitch: 0.0, yaw: 0.0}
+ust30lx:
+  {x: 0.0, y: 0.0, z: 0.18, roll: 0.0, pitch: 0.0, yaw: 0.0}
