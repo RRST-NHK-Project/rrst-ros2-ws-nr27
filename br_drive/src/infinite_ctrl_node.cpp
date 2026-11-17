@@ -18,7 +18,9 @@
 //   ・指令は50回/秒で送り続ける(0.5秒届かないと駆動ノードが脱力させる)。
 //   ・始める前に2台とも返事が届いていること、操舵の内部の位置が±12rad以内を確かめる。
 //   ・操舵は「今の向きから±90°以内」へだけ回し、超える時は車輪を逆転させる。
-//     目標は±11.5rad以内に収め、何周も回さない(4.1節・10.3節)。
+//     操舵モータの目標は±11.5rad以内に収め、何周も回さない(4.1節・10.3節)。
+//     歯車 13:49 なので、車輪の向きでは起動時から約±175°まで。
+//   ・歯車の比(操舵 13:49、駆動 23:33)は kSteerGear / kDriveGear で計算に入れてある。
 //   ・【DM3519の暴走対策(9.1節)】駆動は低速(kDriveMaxRadps)に制限し、加速度も
 //     制限して、前進⇔後退を素早く切り替えない。さらに暴走の見張りを入れてある
 //     (実速度が指令と逆向きで10rad/s以上ずれる、または上限+5rad/sを超えるのが
@@ -64,12 +66,23 @@ namespace Infinite_Zakisute
 // 調整する値(まずは低速のまま試すこと)
 // ---------------------------------------------------------------------
 constexpr double kPeriodSec = 0.02;          // 指令を送る周期(50回/秒)
-constexpr double kDriveMaxRadps = 5.0;       // 駆動の最高速度[rad/s](9.1節: 低速から)
-constexpr double kDriveAccelRadps2 = 5.0;    // 駆動の加速度の上限[rad/s^2]
+
+// 歯車の比(モータ側の歯数 : 車輪側の歯数)。モータの値 = 車輪の値 × 比
+constexpr double kSteerGear = 49.0 / 13.0;   // 操舵 13:49。モータが約3.77回転で車輪の向きが1回転
+constexpr double kDriveGear = 33.0 / 23.0;   // 駆動 23:33。モータが約1.43回転で車輪が1回転
+constexpr double kSteerSign = 1.0;           // 右に倒して車輪が左を向くなら -1.0 にする
 constexpr double kDriveSign = 1.0;           // 車輪の前後が逆なら -1.0 にする
-constexpr double kSteerSpeedRadps = 5.0;     // 操舵の速さの上限[rad/s]
-constexpr double kSteerLimitRad = 11.5;      // 操舵の目標の範囲[rad](±12radより少し内側)
-constexpr double kAlignTolRad = 0.3;         // 操舵がこれ以上ずれている間は駆動しない[rad]
+
+// 駆動(モータの出力軸の値。暴走の見張りもこの値で行う)
+constexpr double kDriveMaxRadps = 5.0;       // 駆動モータの最高速度[rad/s](9.1節: 低速から)
+                                             // → 車輪では 5.0 ÷ 1.43 ≒ 3.5rad/s
+constexpr double kDriveAccelRadps2 = 5.0;    // 駆動モータの加速度の上限[rad/s^2]
+// 操舵(モータの出力軸の値)
+constexpr double kSteerLimitRad = 11.5;      // 操舵モータの目標の範囲[rad](±12radより少し内側)
+                                             // → 車輪の向きでは ±11.5 ÷ 3.77 ≒ ±3.05rad(±175°)
+// 操舵(車輪の向きの値)
+constexpr double kSteerSpeedRadps = 1.5;     // 車輪の向きを変える速さの上限[rad/s](モータでは×3.77)
+constexpr double kAlignTolRad = 0.3;         // 車輪の向きがこれ以上ずれている間は駆動しない[rad]
 constexpr double kReverseHysteresisRad = 0.2;  // 車輪の逆転を切り替えにくくする余裕[rad]
 constexpr double kStickDeadzone = 0.5;       // 左スティックをこれ以上倒したら向きを変える
 constexpr double kJoyTimeoutSec = 0.5;       // joyがこれ以上来なければ止める
@@ -227,23 +240,35 @@ private:
     joy_received_ = true;
   }
 
+  // 車輪の向き[rad](起動時=0) → 操舵モータの位置[rad]
+  double wheel_to_motor(double wheel_angle) const
+  {
+    return steer_zero_ + kSteerSign * kSteerGear * wheel_angle;
+  }
+  // 操舵モータの位置[rad] → 車輪の向き[rad](起動時=0)
+  double motor_to_wheel(double motor_pos) const
+  {
+    return kSteerSign * (motor_pos - steer_zero_) / kSteerGear;
+  }
+
   // ===================================================================
   // 操舵の目標を決める。heading = 起動時の向きから見た、車輪を向けたい方向[rad]。
-  // 「heading + k×半回転」の中から、今の目標に一番近く、±kSteerLimitRad に
-  // 収まるものを選ぶ(kが奇数なら車輪を逆転させる)。見つからなければ false。
+  // 「heading + k×半回転」の中から、今の目標に一番近く、操舵モータの位置が
+  // ±kSteerLimitRad に収まるものを選ぶ(kが奇数なら車輪を逆転させる)。
+  // target は操舵モータの位置[rad]で返す。見つからなければ false。
   // ===================================================================
   bool choose_steer(double heading, double & target, bool & reverse) const
   {
     double best_cost = std::numeric_limits<double>::infinity();
     bool found = false;
     for (int k = -8; k <= 8; ++k) {
-      const double cand = steer_zero_ + heading + k * M_PI;
+      const double cand = wheel_to_motor(heading + k * M_PI);
       if (std::abs(cand) > kSteerLimitRad) {
         continue;
       }
       const bool rev = (k % 2) != 0;
-      // 逆転の切り替えを起こしにくくする(前進⇔後退を素早く切り替えないため)
-      const double cost = std::abs(cand - steer_target_) +
+      // 車輪の向きで比べる。逆転の切り替えを起こしにくくする(前進⇔後退を素早く切り替えないため)
+      const double cost = std::abs(cand - steer_target_) / kSteerGear +
         (rev != steer_reverse_ ? kReverseHysteresisRad : 0.0);
       if (cost < best_cost) {
         best_cost = cost;
@@ -270,8 +295,8 @@ private:
         steer_target_ = target;
         steer_reverse_ = reverse;
       }
-      // 操舵が目標の向きに着いてから駆動する
-      if (std::abs(steer_.position() - steer_target_) < kAlignTolRad) {
+      // 操舵が目標の向きに着いてから駆動する(ずれは車輪の向きで比べる)
+      if (std::abs(steer_.position() - steer_target_) / kSteerGear < kAlignTolRad) {
         drive_target = kDriveSign * (steer_reverse_ ? -1.0 : 1.0) * r2_ * kDriveMaxRadps;
       }
     }
@@ -284,7 +309,7 @@ private:
     } else {
       drive_cmd_ = drive_target;
     }
-    steer_.set_angle(steer_target_, kSteerSpeedRadps);
+    steer_.set_angle(steer_target_, kSteerSpeedRadps * kSteerGear);  // 速さはモータの値にして送る
     drive_.set_velocity(drive_cmd_);
   }
   // ===================================================================
@@ -390,10 +415,13 @@ private:
     // 1秒ごとに様子を表示
     if (now - last_print_ >= 1s) {
       last_print_ = now;
+      // 車輪の値で表示する(かっこ内はモータの値)
       RCLCPP_INFO(
-        get_logger(), "%s 操舵: 目標%+6.3f 位置%+6.3frad  駆動: 指令%+6.2f 実速度%+6.2frad/s",
-        active ? "[動作]" : "[脱力]", steer_target_, steer_.position(), drive_cmd_,
-        drive_.velocity());
+        get_logger(), "%s 車輪の向き: 目標%+7.1f° 今%+7.1f°(モータ%+6.2frad)  "
+        "車輪の速さ: 指令%+5.2f 実%+5.2frad/s(モータ%+5.2frad/s)",
+        active ? "[動作]" : "[脱力]",
+        motor_to_wheel(steer_target_) * 180.0 / M_PI, motor_to_wheel(steer_.position()) * 180.0 / M_PI,
+        steer_.position(), drive_cmd_ / kDriveGear, drive_.velocity() / kDriveGear, drive_.velocity());
     }
   }
 
