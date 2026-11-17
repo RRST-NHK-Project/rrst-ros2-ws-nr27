@@ -40,6 +40,15 @@ ament_target_dependencies(
 )
 target_link_libraries(infinite_ctrl_node br_drive_lib)
 
+# 操舵の原点センサー(C-MSX951N-2M-R)の状態を serial_rx_201 から読んで配信するノード
+add_executable(origin_sensor_node src/origin_sensor_node.cpp)
+target_compile_features(origin_sensor_node PUBLIC cxx_std_17)
+ament_target_dependencies(
+  origin_sensor_node
+  "rclcpp"
+  "std_msgs"
+)
+
 # 他のパッケージからも使えるように書き出す
 install(TARGETS br_drive_lib
   EXPORT export_br_drive
@@ -50,7 +59,7 @@ install(DIRECTORY include/
   DESTINATION include)
 ament_export_targets(export_br_drive HAS_LIBRARY_TARGET)
 ament_export_dependencies(rclcpp geometry_msgs)
-install(TARGETS infinite_ctrl_node
+install(TARGETS infinite_ctrl_node origin_sensor_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
