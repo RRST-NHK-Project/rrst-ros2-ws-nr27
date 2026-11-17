@@ -11,23 +11,67 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(common REQUIRED)  # PID.hpp (rrst-ros2-ws/common)
 
-add_executable(br_swervedrive src/br_swervedrive_node.cpp)
-ament_target_dependencies(br_swervedrive rclcpp std_msgs sensor_msgs geometry_msgs nav_msgs)
+# ROSに依存しない計算部分 (単体テストする)
+add_library(swerve_kinematics STATIC src/swerve_kinematics.cpp)
+target_include_directories(swerve_kinematics PUBLIC include)
+
+# 入力
+add_executable(br_joy_teleop src/br_joy_teleop_node.cpp)
+ament_target_dependencies(br_joy_teleop rclcpp sensor_msgs geometry_msgs)
+
+# 計算
+add_executable(br_swerve_kinematics src/br_swerve_kinematics_node.cpp)
+target_link_libraries(br_swerve_kinematics swerve_kinematics)
+ament_target_dependencies(br_swerve_kinematics rclcpp geometry_msgs std_msgs)
+
+add_executable(br_pid src/br_pid_node.cpp)
+target_include_directories(br_pid PRIVATE include)
+ament_target_dependencies(br_pid rclcpp std_msgs common)
+
+add_executable(dob_node src/dob_node.cpp)
+ament_target_dependencies(dob_node rclcpp geometry_msgs nav_msgs)
+
+# 機構 (ros2can 経由でモーターを動かす)
+add_executable(br_steer_dm2325 src/br_steer_dm2325_node.cpp)
+target_include_directories(br_steer_dm2325 PRIVATE include)
+ament_target_dependencies(br_steer_dm2325 rclcpp std_msgs std_srvs)
+
+add_executable(br_drive_735 src/br_drive_735_node.cpp)
+target_include_directories(br_drive_735 PRIVATE include)
+ament_target_dependencies(br_drive_735 rclcpp std_msgs)
 
 install(TARGETS
-  br_swervedrive
+  br_joy_teleop
+  br_swerve_kinematics
+  br_pid
+  dob_node
+  br_steer_dm2325
+  br_drive_735
   DESTINATION lib/${PROJECT_NAME})
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)
-  install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
-endif()
+install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_swerve_kinematics test/test_swerve_kinematics.cpp)
+  target_link_libraries(test_swerve_kinematics swerve_kinematics)
+  ament_add_gtest(test_damiao_slots test/test_damiao_slots.cpp)
+  target_include_directories(test_damiao_slots PRIVATE include)
+
+  # copyright: 著作権表記の方針がまだ決まっていないので使わない
+  # uncrustify: ROS 2 スタイルを強制し、Google C++ Style と衝突するので使わない
+  #   (書式は .clang-format (Google)、規約は下の cpplint (Google製) で見る)
+  # cpplint: 著作権チェックだけ外して下で個別に呼ぶ
   find_package(ament_lint_auto REQUIRED)
-  set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE
+    ament_cmake_copyright ament_cmake_uncrustify ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
 endif()
 
 ament_package()

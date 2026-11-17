@@ -1,0 +1,22 @@
+# NR27 LiDAR の udev ルール (USBシリアルの機種を固定名で呼ぶ)。
+#   LD19     -> /dev/ld19
+#   YDLIDAR TG30 -> /dev/tg30
+# UST-30LX は Ethernet (192.168.0.10) なので、ここには要らない。
+#
+# 【要設定】LD19 も TG30 も CP210x (10c4:ea60) のアダプタを使っていると、VID/PID では
+# 区別できない。シリアル番号か、挿すUSBポートで区別する。調べ方 (機器をつないで):
+#     udevadm info -a -n /dev/ttyUSB0 | grep -E "ATTRS\{serial\}|KERNELS"
+# CP210x の既定のシリアル番号は同じ値 (例: 0001) のことがある。その場合は
+# ATTRS{serial} ではなく、KERNELS=="1-2.3" のように挿すポートで区別する。
+#
+# 使い方:
+#   1. 下の【...】を書き換える
+#   2. sudo cp 99-nr27-lidar.rules /etc/udev/rules.d/
+#   3. sudo udevadm control --reload-rules && sudo udevadm trigger
+#   4. ls -l /dev/ld19 /dev/tg30 で確認
+#
+# 注意: nr26 の ldlidar.rules (10c4:ea60 に全部 /dev/ldlidar を付ける) を入れている場合は、
+# 同じ機器に両方のルールが当たる。nr27 では nr26 のルールを外すこと。
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="【LD19のシリアル番号】", MODE:="0666", SYMLINK+="ld19"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="【TG30のシリアル番号】", MODE:="0666", SYMLINK+="tg30"

@@ -1,0 +1,21 @@
+# LD19 (LDROBOT) の設定。ドライバ: ldrobot-lidar-ros2 (ldlidar_component)
+# frame_id は launch の引数で上書きされる (既定 ld19_link)。
+/**:
+  ros__parameters:
+    general:
+      debug_mode: false
+    comm:
+      serial_port: '/dev/ld19'  # udev のシンボリックリンク (udev/99-nr27-lidar.rules)
+      baudrate: 230400
+      timeout_msec: 1000
+    lidar:
+      model: 'LD19'      # ドライバが受け付けるのは 'LD06' / 'LD19' (nr26 の yaml の LDLiDAR_LD19 は不可)
+      rot_verse: 'CCW'   # ROS標準
+      units: 'M'         # ROS標準
+      frame_id: 'ld19_link'
+      bins: 455          # SLAM Toolbox 互換の固定ビン数
+      range_min: 0.03
+      range_max: 15.0
+      enable_angle_crop: false
+      angle_crop_min: 90.0
+      angle_crop_max: 270.0

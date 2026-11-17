@@ -1,0 +1,22 @@
+# Hokuyo UST-30LX (Ethernet) の設定。ドライバ: urg_node2
+# frame_id は launch の引数で上書きされる (既定 ust30lx_link)。
+# センサ側の IP は 192.168.0.10。PC側は 192.168.0.x/24 に合わせておくこと
+# (例: sudo nmcli con up lidar)。
+/**:
+  ros__parameters:
+    ip_address: '192.168.0.10'
+    ip_port: 10940
+    frame_id: 'ust30lx_link'
+    calibrate_time: false
+    synchronize_time: false
+    publish_intensity: false
+    publish_multiecho: false
+    error_limit: 4
+    error_reset_period: 5.0
+    diagnostics_tolerance: 0.05
+    diagnostics_window_time: 5.0
+    time_offset: 0.0
+    angle_min: -3.14   # センサの測定範囲 (270°) に自動で丸められる
+    angle_max: 3.14
+    skip: 0
+    cluster: 1

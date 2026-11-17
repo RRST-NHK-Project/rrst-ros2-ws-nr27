@@ -47,8 +47,8 @@ class DisturbanceObserver {
     v_filtered_ += alpha * (v - v_filtered_);
     u_filtered_ += alpha * (u - u_filtered_);
     const double v_dot_filtered = (v - v_filtered_) / q_tau_;
-    d_hat_ = (time_constant_ * v_dot_filtered + v_filtered_) / gain_ -
-             u_filtered_;
+    d_hat_ =
+        (time_constant_ * v_dot_filtered + v_filtered_) / gain_ - u_filtered_;
     return d_hat_;
   }
 
@@ -75,7 +75,7 @@ class DisturbanceObserverNode : public rclcpp::Node {
  public:
   DisturbanceObserverNode() : Node("disturbance_observer") {
     declare_parameter<double>("control_rate", 20.0);  // [Hz]
-    declare_parameter<double>("timeout", 0.5);         // [s]
+    declare_parameter<double>("timeout", 0.5);        // [s]
     declare_parameter<std::vector<double>>("gain", {1.0, 1.0, 1.0});
     declare_parameter<std::vector<double>>("time_constant", {0.1, 0.1, 0.1});
     declare_parameter<std::vector<double>>("q_tau", {0.1, 0.1, 0.1});
@@ -103,13 +103,12 @@ class DisturbanceObserverNode : public rclcpp::Node {
           OnRef(*msg);
         });
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-        "odom", 10, [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
-          OnOdom(*msg);
-        });
-    timer_ = create_wall_timer(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>(dt_)),
-        [this]() { ControlLoop(); });
+        "odom", 10,
+        [this](const nav_msgs::msg::Odometry::SharedPtr msg) { OnOdom(*msg); });
+    timer_ =
+        create_wall_timer(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              std::chrono::duration<double>(dt_)),
+                          [this]() { ControlLoop(); });
   }
 
  private:
@@ -141,8 +140,7 @@ class DisturbanceObserverNode : public rclcpp::Node {
 
   void ControlLoop() {
     const rclcpp::Time t = now();
-    const bool ref_ok =
-        has_ref_ && (t - last_ref_time_).seconds() < timeout_;
+    const bool ref_ok = has_ref_ && (t - last_ref_time_).seconds() < timeout_;
     const bool odom_ok =
         has_odom_ && (t - last_odom_time_).seconds() < timeout_;
 
@@ -185,7 +183,7 @@ class DisturbanceObserverNode : public rclcpp::Node {
     disturbance_pub_->publish(msg);
   }
 
-  //Ros
+  // ROS
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr disturbance_pub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr ref_sub_;

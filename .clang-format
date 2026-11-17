@@ -1,0 +1,5 @@
+# Google C++ Style Guide に合わせる (https://google.github.io/styleguide/cppguide.html)
+BasedOnStyle: Google
+# 日本語のコメントは空白で区切られないので、自動で折り返すと文の途中で切れる。
+# コメントの改行は手で入れる。
+ReflowComments: false
