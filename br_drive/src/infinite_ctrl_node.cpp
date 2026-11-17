@@ -21,6 +21,8 @@
 //   R2           : 駆動の速さ(押し込むほど速い。最大 kDriveMaxRadps)。use_drive:=true の時だけ
 //   Options      : E-STOP(R1を離して押し直すと再開)
 //   △           : 原点合わせを始める(R1を押したまま。終わるか失敗するまでスティックは効かない)
+//   ※起動してモータと通信できたら、最初にR1を押した時に自動で1回だけ原点合わせをする
+//     (△は要らない。途中でR1を離したら、次にR1を押した時に続きからやり直す)
 //
 // ■ 原点合わせ(操舵の原点センサー C-MSX951N-2M-R、2026-11-18追加)
 //   センサーの値は ESP32(soki_damiao_201)が serial_rx_201 の23番に入れる
@@ -453,6 +455,7 @@ private:
     steer_reverse_ = false;
     homing_ = Homing::kIdle;
     homed_ = true;
+    auto_homing_pending_ = false;
     RCLCPP_INFO(get_logger(), "原点合わせができました(センサーの位置 モータ%+.3frad = 車輪%+.1f°)。"
       "スティックの「上」を決め直しました", edge_motor_pos, origin_offset_rad_ * 180.0 / M_PI);
   }
@@ -461,6 +464,7 @@ private:
   {
     RCLCPP_ERROR(get_logger(), "原点合わせをやめました: %s。原点は前のままです", reason);
     homing_ = Homing::kIdle;
+    auto_homing_pending_ = false;  // 失敗したら自動ではやり直さない(△で手動ならできる)
     steer_target_ = steer_.position();  // その場で止まる
     // R1を押し直すまで動かさない(何が起きたか人が確かめてから)
     armed_ = false;
@@ -605,8 +609,9 @@ private:
         steer_zero_ = steer_.position();  // 起動時の向きを「スティック上」にする
         steer_target_ = steer_zero_;
         started_ = true;
+        auto_homing_pending_ = true;  // 最初にR1を押した時に1回だけ原点合わせをする
         RCLCPP_INFO(get_logger(), "準備できました(操舵の始めの向き %+.3frad、%s)。"
-          "R1を押している間だけ動きます", steer_zero_,
+          "R1を押している間だけ動きます。最初にR1を押すと原点合わせをします", steer_zero_,
           use_drive_ ? "駆動も使う" : "操舵だけ。駆動には脱力だけを送る");
       } else if (now - created_ > 5s) {
         RCLCPP_ERROR(get_logger(), "5秒待ってもモータから返事が来ません"
@@ -664,6 +669,9 @@ private:
         steer_reverse_ = false;
         was_active_ = true;
       }
+      if (auto_homing_pending_ && homing_ == Homing::kIdle) {
+        homing_requested_ = true;  // 起動後の1回目の原点合わせ
+      }
       if (homing_requested_) {
         homing_requested_ = false;
         if (homing_ == Homing::kIdle) {
@@ -671,6 +679,7 @@ private:
             RCLCPP_ERROR(get_logger(), "原点センサーの値が来ていないので、原点合わせを始められません"
               "(serial_rx_%d の%zu番。ESP32のファームが原点センサーに対応しているか確認)",
               kOriginDeviceId, kOriginSlot);
+            auto_homing_pending_ = false;  // 自動ではもうやらない(△で手動ならできる)
           } else {
             homing_ = origin_on_ ? Homing::kBackoff : Homing::kSeek;
             homing_fine_ = false;  // まず速く探す
@@ -757,7 +766,8 @@ private:
   bool estop_{false};
   bool joy_received_{false};
   bool triangle_prev_{false};
-  bool homing_requested_{false};  // △が押された(次の on_timer() で原点合わせを始める)
+  bool homing_requested_{false};
+  bool auto_homing_pending_{false};  // 起動後の自動の原点合わせがまだ終わっていない  // △が押された(次の on_timer() で原点合わせを始める)
   // 原点センサー・原点合わせ
   bool origin_valid_{false};
   bool origin_on_{false};
