@@ -4,8 +4,20 @@
 //   (dokusute_damiao_handover.md)の決まりに合わせて書き換えたもの。
 // =====================================================================
 // ■ モータの役割(引き継ぎ資料 3章・9.4節)
-//   モータ1 = 操舵 DM2325 → 角度制御(POS_VEL)
+//   モータ1 = 操舵 DM2325 → 角度制御(POS_VEL)か速度制御(VEL)。kSteerMode で切り替える(下)
 //   モータ2 = 駆動 DM3519 → 速度制御(VEL)。DM3519は角度制御に使えない(4.1節)
+//
+// ■ 操舵の2つの制御のしかた(定数 kSteerMode。変えたらビルドし直す)
+//   SteerMode::kAngle … ESCの角度制御。正確。
+//     動けるのは起動時の向きから約±175°まで。届かない向きは、車輪を逆転させて向く。
+//   SteerMode::kVelocity(今の設定) … ESCの速度制御 + このノードの中で位置を制御(P制御)。
+//     何周でも同じ向きに回れる(全方位に無限旋回。車輪の逆転はしない)。
+//     ・位置は、±12.5radで一周する帰還の位置をつなぎ合わせて数える。
+//     ・同じ向きに何百rad(モータ)も回すと、ESCの中の位置の数え方が粗くなり、ゆっくり
+//       回した時に位置の読みが変わらなくなる(実際には回っている。引き継ぎ資料・damiao.cpp参照)。
+//       → 速度の読みと位置の読みが食い違ったら止める見張りを入れてある。
+//         内部の位置が kInternalPosWarnRad を超えたら警告するので、ESCの電源を入れ直す(0に戻る)。
+//     ・止まる位置の正確さは角度制御より少し落ちる(50回/秒で速度を指令するため)。
 //
 // ■ 2つの使い方(パラメータ use_drive)
 //   操舵だけ(既定): ros2 run br_drive infinite_ctrl_node
@@ -35,9 +47,10 @@
 //        kHomingSettleSec 止まり(遅れて届くセンサーの値が追いつくのを待つ)、まだONなら
 //        さらに−向きに戻って、OFFになっているのを確かめてから、+向きにゆっくり(kHomingSlowRadps)回し直して、
 //        ONになった所を原点とする(速さと正確さの両立)
-//     4. +向きの端(操舵モータ +kSteerLimitRad)まで行っても無ければ、−向きに戻りながら探し、
-//        見つけたら 1 からやり直す(いつも「+向きに回してONになる所」を原点にするため)
-//     5. −向きの端まで行っても無い・kHomingTimeoutSec を超えた → 失敗(脱力して原点はそのまま)
+//     4. 角度制御の時: +向きの端(操舵モータ +kSteerLimitRad)まで行っても無ければ、−向きに
+//        戻りながら探し、見つけたら 1 からやり直す(いつも「+向きに回してONになる所」を原点にするため)
+//        速度制御の時: 端は無いので、+向きに車輪 kHomingMaxTurns 周まで回して探す
+//     5. 見つからない・kHomingTimeoutSec を超えた → 失敗(脱力して原点はそのまま)
 //   見つけた所の車輪の向きを origin_offset_deg(既定0 = 前)として、スティックの「上」を決め直す。
 //   原点合わせの前は、今まで通り「起動時の向き」がスティックの「上」。
 //   ※センサーの値が来ていない(古いファーム・ros2canが止まっている)時は、原点合わせは始めない。
@@ -50,10 +63,12 @@
 //     kStallVelRadps 未満のまま kStallHoldSec 続いたら、2台とも脱力してノードを終える
 //     (回らないまま大きな電流を流し続けて、モータを焼かないため)。
 //   ・指令は50回/秒で送り続ける(0.5秒届かないと駆動ノードが脱力させる)。
-//   ・始める前に返事が届いていること、操舵の内部の位置が±12rad以内を確かめる。
-//   ・操舵は「今の向きから±90°以内」へだけ回し、超える時は車輪を逆転させる。
+//   ・始める前に返事が届いていること、(角度制御の時は)操舵の内部の位置が±12rad以内を確かめる。
+//   ・角度制御の時: 操舵は「今の向きから±90°以内」へだけ回し、超える時は車輪を逆転させる。
 //     操舵モータの目標は±11.5rad以内に収め、何周も回さない(4.1節・10.3節)。
 //     歯車 13:49 なので、車輪の向きでは起動時から約±175°まで。
+//   ・速度制御の時: 一番近い回り方で向きを変える(何周でもよい)。位置の数え間違い
+//     (1回で kPosJumpRad 以上の変化)・位置の読みの止まり(上)を見つけたら、2台とも脱力して終える。
 //   ・歯車の比(操舵 13:49、駆動 23:33)は kSteerGear / kDriveGear で計算に入れてある。
 //   ・【DM3519の暴走対策(9.1節)】駆動は低速(kDriveMaxRadps)に制限し、加速度も
 //     制限して、前進⇔後退を素早く切り替えない。さらに暴走の見張りを入れてある
@@ -79,8 +94,10 @@
 //   origin_offset_deg : 原点センサーがONになる所の車輪の向き[°](前 = 0、右 = +90。既定 0)
 // =====================================================================
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -135,6 +152,26 @@ constexpr double kStallTorqueNm = 3.0;       // トルクがこれ以上なの�
 constexpr double kStallVelRadps = 0.5;       // 速度がこれ未満のまま
 constexpr double kStallHoldSec = 0.5;        // これだけ続いたら止める
 
+// ---------------------------------------------------------------------
+// 操舵の制御のしかた【ここで切り替える】(説明はファイルの先頭)
+//   SteerMode::kAngle    : 角度制御。正確。起動時から約±175°まで、届かない向きは車輪を逆転
+//   SteerMode::kVelocity : 速度制御 + ノードの中で位置制御。何周でも回れる(逆転なし)
+// ---------------------------------------------------------------------
+enum class SteerMode {kAngle, kVelocity};
+constexpr SteerMode kSteerMode = SteerMode::kVelocity;
+constexpr bool kSteerVel = (kSteerMode == SteerMode::kVelocity);
+
+// 速度制御(kVelocity)の時だけ使う値(モータの出力軸の値)
+constexpr double kSteerKp = 6.0;              // 位置のずれ1radあたりの速度指令[rad/s]
+constexpr double kSteerHoldTolRad = 0.01;     // ずれがこれ未満なら速度0にする[rad]
+constexpr double kPosWrapRad = 12.5;          // 帰還の位置は±これで一周する(ESCのP_MAX)
+constexpr double kPosJumpRad = 3.0;           // 1回の帰還でこれ以上動いたら数え間違いとして止める
+constexpr double kPosStuckCheckSec = 0.3;     // 位置の読みが止まっていないか見る間隔[s]
+constexpr double kPosStuckMinRad = 0.3;       // 速度の読みからこれ以上動いたはずなのに
+constexpr double kPosStuckRatio = 0.5;        // 位置の読みがその半分も変わっていなければ止める
+constexpr double kInternalPosWarnRad = 100.0; // 内部の位置がこれを超えたら警告(電源を入れ直すと0)
+constexpr double kHomingMaxTurns = 1.3;       // 原点合わせで車輪を何周まで回して探すか
+
 // 原点合わせ(原点センサー)
 constexpr int kOriginDeviceId = 201;         // ESP32のDEVICE_ID → serial_rx_201 を読む
 constexpr size_t kOriginSlot = 23;           // 原点センサーの値が入る番号(damiao.cppと同じ)
@@ -177,13 +214,34 @@ public:
       prefix + "/state", 10,
       [this](const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
         if (msg->data.size() >= 6) {
+          const auto t = std::chrono::steady_clock::now();
           position_ = msg->data[0];
+          // 位置をつなぎ合わせる(帰還の位置は±kPosWrapRadで一周する)
+          if (!have_pos_) {
+            unwrapped_ = position_;
+            have_pos_ = true;
+          } else {
+            double d = position_ - last_raw_pos_;
+            if (d > kPosWrapRad) {
+              d -= 2.0 * kPosWrapRad;
+            } else if (d < -kPosWrapRad) {
+              d += 2.0 * kPosWrapRad;
+            }
+            if (std::abs(d) > kPosJumpRad) {
+              pos_jump_ = true;  // 帰還が抜けた・数え間違い
+            }
+            unwrapped_ += d;
+            // 速度の読みを足し合わせる(位置の読みと比べて、読みが止まっていないかを見る)
+            const double dt = std::chrono::duration<double>(t - last_state_time_).count();
+            vel_integral_ += msg->data[1] * std::clamp(dt, 0.0, 0.1);
+          }
+          last_raw_pos_ = position_;
           velocity_ = msg->data[1];
           torque_ = msg->data[2];
           state_ = static_cast<int>(msg->data[3]);
           feedback_ok_ = msg->data[4] > 0.5f;
           internal_pos_ = msg->data[5];
-          last_state_time_ = std::chrono::steady_clock::now();
+          last_state_time_ = t;
         }
       });
   }
@@ -206,6 +264,10 @@ public:
 
   // ---- 今の状態 ----
   double position() const {return position_;}   // 位置[rad](±12.5radで一周)
+  double position_unwrapped() const {return unwrapped_;}  // つなぎ合わせた位置[rad](何周でも)
+  bool pos_jump() const {return pos_jump_;}     // 位置の数え間違いがあったか
+  double vel_integral() const {return vel_integral_;}  // 速度の読みを足し合わせたもの[rad]
+  double internal_pos() const {return internal_pos_;}  // モータ内部の位置[rad](不明ならNaN)
   double velocity() const {return velocity_;}   // 速度[rad/s]
   double torque() const {return torque_;}       // トルク[N・m]
   int state() const {return state_;}            // 0=脱力 1=有効 それ以外=故障(15=止めたまま)
@@ -228,6 +290,11 @@ private:
   int state_{0};
   bool feedback_ok_{false};
   double internal_pos_{std::nan("")};
+  bool have_pos_{false};
+  double last_raw_pos_{0.0};
+  double unwrapped_{0.0};
+  bool pos_jump_{false};
+  double vel_integral_{0.0};
   std::chrono::steady_clock::time_point last_state_time_{};
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr cmd_pub_;
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr state_sub_;
@@ -371,13 +438,16 @@ private:
     const double speed =
       (homing_ == Homing::kSeek && homing_fine_) ? kHomingSlowRadps : kHomingFastRadps;
     const double step = speed * kSteerGear * kPeriodSec;
+    const double move = kSteerSign * speed * kSteerGear;  // 回す時の速さ(モータ、+向き)
+    double ff = 0.0;  // 速度制御の時に足す速度(止まって待つ時は0)
     switch (homing_) {
       case Homing::kBackoff:   // −向きに戻る
         if (backoff_to_target_) {
           // 見つけた後: 決めた所まで戻ったら止まり、センサーの値が追いつくまで待つ
           // (遅れて届く値は、行き過ぎた先の「OFF」のことがあるので、動いている間は信じない)
-          if (kSteerSign * (steer_.position() - backoff_target_) > 0.0) {
+          if (kSteerSign * (steer_pos() - backoff_target_) > 0.0) {
             steer_target_ -= kSteerSign * step;
+            ff = -move;
             settle_started_ = false;
             break;
           }
@@ -396,25 +466,27 @@ private:
           homing_ = Homing::kSeek;
         } else {
           steer_target_ -= kSteerSign * step;
+          ff = -move;
         }
         break;
       case Homing::kSeek:      // +向きに回して、ONになる所を探す
         if (origin_on_) {
           if (homing_fine_) {
-            homing_done(steer_.position());
+            homing_done(steer_pos());
             return;
           }
           // 速く回していたので少し行き過ぎている → ゆっくり抜けてから合わせ直す
           RCLCPP_INFO(get_logger(), "原点合わせ: 見つけました。ゆっくり合わせ直します");
           homing_fine_ = true;
           homing_ = Homing::kBackoff;
-          steer_target_ = steer_.position();
-          backoff_target_ = steer_.position() - kSteerSign * kSteerGear * kHomingBackoffRad;
+          steer_target_ = steer_pos();
+          backoff_target_ = steer_pos() - kSteerSign * kSteerGear * kHomingBackoffRad;
           backoff_to_target_ = true;
           break;
         }
         steer_target_ += kSteerSign * step;
-        if (std::abs(steer_target_) > kSteerLimitRad) {
+        ff = move;
+        if (!kSteerVel && std::abs(steer_target_) > kSteerLimitRad) {
           steer_target_ = std::copysign(kSteerLimitRad, steer_target_);  // 端で止めて折り返す
           RCLCPP_INFO(get_logger(), "原点合わせ: +向きの端まで来ました。−向きに戻りながら探します");
           homing_ = Homing::kReturn;
@@ -426,25 +498,33 @@ private:
           homing_ = Homing::kBackoff;
         } else {
           steer_target_ -= kSteerSign * step;
+          ff = -move;
         }
         break;
       case Homing::kIdle:
         return;
     }
-    // −向きの端より先へは行かない
-    if (std::abs(steer_target_) > kSteerLimitRad) {
+    if (kSteerVel) {
+      // 速度制御: 端は無いので、回した量で決める
+      if (std::abs(steer_pos() - homing_start_pos_) > kHomingMaxTurns * 2.0 * M_PI * kSteerGear) {
+        homing_fail("車輪を1周以上回しても、原点センサーが見つかりませんでした"
+          "(センサーの位置・黒線・電源を確認)");
+        return;
+      }
+    } else if (std::abs(steer_target_) > kSteerLimitRad) {
+      // 角度制御: −向きの端より先へは行かない
       homing_fail("操舵の動ける範囲の端まで回しても、原点センサーが見つかりませんでした"
         "(センサーの位置・黒線・電源を確認)");
       return;
     }
     // 目標は今の位置から離れすぎないようにする(モータが追いつかない時に先へ行かない)
     const double max_lead = 5.0 * step;
-    if (steer_target_ > steer_.position() + max_lead) {
-      steer_target_ = steer_.position() + max_lead;
-    } else if (steer_target_ < steer_.position() - max_lead) {
-      steer_target_ = steer_.position() - max_lead;
+    if (steer_target_ > steer_pos() + max_lead) {
+      steer_target_ = steer_pos() + max_lead;
+    } else if (steer_target_ < steer_pos() - max_lead) {
+      steer_target_ = steer_pos() - max_lead;
     }
-    steer_.set_angle(steer_target_, 2.0 * speed * kSteerGear);
+    steer_output(2.0 * speed * kSteerGear, ff);
   }
 
   void homing_done(double edge_motor_pos)
@@ -465,9 +545,32 @@ private:
     RCLCPP_ERROR(get_logger(), "原点合わせをやめました: %s。原点は前のままです", reason);
     homing_ = Homing::kIdle;
     auto_homing_pending_ = false;  // 失敗したら自動ではやり直さない(△で手動ならできる)
-    steer_target_ = steer_.position();  // その場で止まる
+    steer_target_ = steer_pos();  // その場で止まる
     // R1を押し直すまで動かさない(何が起きたか人が確かめてから)
     armed_ = false;
+  }
+
+  // 操舵モータの今の位置[rad]。速度制御の時はつなぎ合わせた位置(何周でも)
+  double steer_pos() const
+  {
+    return kSteerVel ? steer_.position_unwrapped() : steer_.position();
+  }
+
+  // 操舵に指令を出す(目標 steer_target_ へ向かう)。max_radps = 速さの上限(モータ)。
+  // ff_radps = 速度制御の時に足す速度(原点合わせで一定の速さで回す時)。
+  void steer_output(double max_radps, double ff_radps = 0.0)
+  {
+    if (!kSteerVel) {
+      steer_.set_angle(steer_target_, max_radps);
+      return;
+    }
+    const double err = steer_target_ - steer_pos();
+    double v = ff_radps + kSteerKp * err;
+    if (ff_radps == 0.0 && std::abs(err) < kSteerHoldTolRad) {
+      v = 0.0;
+    }
+    steer_vel_cmd_ = std::clamp(v, -max_radps, max_radps);
+    steer_.set_velocity(steer_vel_cmd_);
   }
 
   // 車輪の向き[rad](起動時=0) → 操舵モータの位置[rad]
@@ -519,15 +622,22 @@ private:
     const double mag = std::hypot(ls_x_, ls_y_);
     if (mag > kStickDeadzone) {
       const double heading = std::atan2(ls_x_, ls_y_);  // 上=0、右=+90°
-      double target = steer_target_;
-      bool reverse = steer_reverse_;
-      if (choose_steer(heading, target, reverse)) {
-        steer_target_ = target;
-        steer_reverse_ = reverse;
+      if (kSteerVel) {
+        // 速度制御: 今の目標から一番近い回り方で向ける(何周でもよい。逆転しない)
+        const double cur = motor_to_wheel(steer_target_);
+        steer_target_ = wheel_to_motor(cur + std::remainder(heading - cur, 2.0 * M_PI));
+        steer_reverse_ = false;
+      } else {
+        double target = steer_target_;
+        bool reverse = steer_reverse_;
+        if (choose_steer(heading, target, reverse)) {
+          steer_target_ = target;
+          steer_reverse_ = reverse;
+        }
       }
       // 操舵が目標の向きに着いてから駆動する(ずれは車輪の向きで比べる)
       if (use_drive_ && r2_ > kR2OnThreshold &&
-        std::abs(steer_.position() - steer_target_) / kSteerGear < kAlignTolRad)
+        std::abs(steer_pos() - steer_target_) / kSteerGear < kAlignTolRad)
       {
         drive_target = kDriveSign * (steer_reverse_ ? -1.0 : 1.0) * r2_ * kDriveMaxRadps;
       }
@@ -541,7 +651,7 @@ private:
     } else {
       drive_cmd_ = drive_target;
     }
-    steer_.set_angle(steer_target_, kSteerSpeedRadps * kSteerGear);  // 速さはモータの値にして送る
+    steer_output(kSteerSpeedRadps * kSteerGear);  // 速さはモータの値にして送る
 
     // 駆動は「回す指令がある間(R2を離した後、ゆっくり0に戻るまでを含む)」だけ有効にする。
     // 指令が0になったら脱力にして、止まったまま力を出し続けないようにする。
@@ -588,6 +698,38 @@ private:
     return held_for(stalled, stall_watch_, stall_since_, now, kStallHoldSec);
   }
 
+  // 速度制御の時の見張り。止めた(finish した)ら true
+  bool steer_velocity_watch(std::chrono::steady_clock::time_point now)
+  {
+    if (steer_.pos_jump()) {
+      RCLCPP_ERROR(get_logger(), "操舵の位置を数え間違えました(帰還の抜け・速すぎる回転)。"
+        "原点が分からなくなったので止めます");
+      finish();
+      return true;
+    }
+    if (now - stuck_check_time_ >= std::chrono::duration<double>(kPosStuckCheckSec)) {
+      const double dv = steer_.vel_integral() - stuck_check_vi_;  // 速度の読みから見た動き
+      const double dp = steer_pos() - stuck_check_pos_;           // 位置の読みの動き
+      if (std::abs(dv) > kPosStuckMinRad && std::abs(dp) < kPosStuckRatio * std::abs(dv)) {
+        RCLCPP_ERROR(get_logger(), "操舵の位置の読みが、速度の読みと合いません(速度から%+.2frad、"
+          "位置は%+.2frad)。ESCの中の位置の数え方が粗くなっている恐れがあるので止めます。"
+          "ESCの電源を入れ直してください(内部の位置 %+.1frad)", dv, dp, steer_.internal_pos());
+        finish();
+        return true;
+      }
+      stuck_check_time_ = now;
+      stuck_check_pos_ = steer_pos();
+      stuck_check_vi_ = steer_.vel_integral();
+    }
+    if (!std::isnan(steer_.internal_pos()) && std::abs(steer_.internal_pos()) > kInternalPosWarnRad) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000,
+        "操舵の内部の位置が%+.0fradです(±%.0fradを超えた)。このまま増えると、ゆっくり回した時に"
+        "位置の読みが変わらなくなります。止めてESCの電源を入れ直してください",
+        steer_.internal_pos(), kInternalPosWarnRad);
+    }
+    return false;
+  }
+
   void on_timer()
   {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -600,16 +742,21 @@ private:
       // 始める前の確認: 使うモータの返事が届くまで待つ(5秒待っても来なければやめる)
       // 操舵だけの時は、駆動の返事は待たない(駆動のESCの電源が切れていてもよい)
       if (steer_.ready() && (!use_drive_ || drive_.ready())) {
-        if (!steer_.angle_ok()) {
+        if (!kSteerVel && !steer_.angle_ok()) {
           RCLCPP_ERROR(get_logger(), "操舵(モータ1)の内部の位置が±12radを超えている(または不明)"
             "ので、角度制御が使えません。ESCの電源を入れ直してください");
           finish();
           return;
         }
-        steer_zero_ = steer_.position();  // 起動時の向きを「スティック上」にする
+        steer_zero_ = steer_pos();  // 起動時の向きを「スティック上」にする
         steer_target_ = steer_zero_;
         started_ = true;
+        stuck_check_time_ = now;
+        stuck_check_pos_ = steer_pos();
+        stuck_check_vi_ = steer_.vel_integral();
         auto_homing_pending_ = true;  // 最初にR1を押した時に1回だけ原点合わせをする
+        RCLCPP_INFO(get_logger(), "操舵は%s", kSteerVel ?
+          "速度制御(何周でも回れる。車輪の逆転なし)" : "角度制御(起動時から約±175°。届かない向きは車輪を逆転)");
         RCLCPP_INFO(get_logger(), "準備できました(操舵の始めの向き %+.3frad、%s)。"
           "R1を押している間だけ動きます。最初にR1を押すと原点合わせをします", steer_zero_,
           use_drive_ ? "駆動も使う" : "操舵だけ。駆動には脱力だけを送る");
@@ -633,6 +780,11 @@ private:
       return;
     }
 
+    // 速度制御の時の見張り: 位置の数え間違い・位置の読みの止まり・内部の位置の大きさ
+    if (kSteerVel && steer_velocity_watch(now)) {
+      return;
+    }
+
     // PS4の入力が使えるか
     bool input_ok = joy_received_ &&
       now - last_joy_time_ < std::chrono::duration<double>(kJoyTimeoutSec);
@@ -651,6 +803,7 @@ private:
       drive_enabled_ = false;
       stall_watch_ = false;
       was_active_ = false;
+      steer_vel_cmd_ = 0.0;
       if (homing_ != Homing::kIdle) {
         RCLCPP_WARN(get_logger(), "原点合わせを中断しました(R1を離した・E-STOP・入力の途絶)");
         homing_ = Homing::kIdle;
@@ -659,13 +812,13 @@ private:
     } else {
       if (!was_active_) {
         // 脱力中に手で回されているかもしれないので、今の向きから始める
-        if (!steer_.angle_ok() || std::abs(steer_.position()) > kSteerLimitRad) {
+        if (!kSteerVel && (!steer_.angle_ok() || std::abs(steer_pos()) > kSteerLimitRad)) {
           RCLCPP_ERROR(get_logger(), "操舵の位置が範囲(±%.1frad)の外です。ESCの電源を入れ直してください",
             kSteerLimitRad);
           finish();
           return;
         }
-        steer_target_ = steer_.position();
+        steer_target_ = steer_pos();
         steer_reverse_ = false;
         was_active_ = true;
       }
@@ -686,7 +839,8 @@ private:
             backoff_to_target_ = false;
             settle_started_ = false;
             homing_started_ = now;
-            steer_target_ = steer_.position();
+            homing_start_pos_ = steer_pos();
+            steer_target_ = steer_pos();
             RCLCPP_INFO(get_logger(), "原点合わせを始めます(R1を押したまま。離すと中断)");
           }
         }
@@ -717,17 +871,24 @@ private:
     // 1秒ごとに様子を表示
     if (now - last_print_ >= 1s) {
       last_print_ = now;
+      // 速度制御の時は、操舵へ送っている速度と内部の位置も出す
+      char extra[96] = "";
+      if (kSteerVel) {
+        std::snprintf(extra, sizeof(extra), "  操舵の速度指令%+5.2frad/s 内部の位置%+.1frad",
+          steer_vel_cmd_, steer_.internal_pos());
+      }
       // 車輪の値で表示する(かっこ内はモータの値)
       RCLCPP_INFO(
         get_logger(), "%s 車輪の向き: 目標%+7.1f° 今%+7.1f°(モータ%+6.2frad)  "
         "車輪の速さ: 指令%+5.2f 実%+5.2frad/s(モータ%+5.2frad/s)  "
-        "状態 操舵%d 駆動%d  駆動トルク%+5.2fN・m  原点センサー %s%s",
+        "状態 操舵%d 駆動%d  駆動トルク%+5.2fN・m  原点センサー %s%s%s",
         active ? "[動作]" : "[脱力]",
-        motor_to_wheel(steer_target_) * 180.0 / M_PI, motor_to_wheel(steer_.position()) * 180.0 / M_PI,
-        steer_.position(), drive_cmd_ / kDriveGear, drive_.velocity() / kDriveGear, drive_.velocity(),
+        motor_to_wheel(steer_target_) * 180.0 / M_PI, motor_to_wheel(steer_pos()) * 180.0 / M_PI,
+        steer_pos(), drive_cmd_ / kDriveGear, drive_.velocity() / kDriveGear, drive_.velocity(),
         steer_.state(), drive_.state(), drive_.torque(),
         !origin_ok(now) ? "なし" : (origin_on_ ? "ON" : "OFF"),
-        homing_ != Homing::kIdle ? "(原点合わせ中)" : (homed_ ? "(合わせ済み)" : ""));
+        homing_ != Homing::kIdle ? "(原点合わせ中)" : (homed_ ? "(合わせ済み)" : ""),
+        extra);
     }
   }
 
@@ -774,6 +935,11 @@ private:
   std::chrono::steady_clock::time_point last_origin_time_{};
   Homing homing_{Homing::kIdle};
   bool homing_fine_{false};
+  double homing_start_pos_{0.0};   // 原点合わせを始めた所(操舵モータ[rad])
+  double steer_vel_cmd_{0.0};      // 速度制御の時に操舵へ送っている速度[rad/s]
+  std::chrono::steady_clock::time_point stuck_check_time_{};
+  double stuck_check_pos_{0.0};
+  double stuck_check_vi_{0.0};
   bool backoff_to_target_{false};  // true = backoff_target_ まで戻ってから探し直す
   double backoff_target_{0.0};
   bool settle_started_{false};
