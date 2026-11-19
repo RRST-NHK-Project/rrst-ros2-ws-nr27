@@ -31,6 +31,8 @@
 //   R1を一度離して押し直す。
 //   左スティック : 倒した方向へ車輪を向ける(上=起動時の向き、右=+90°)
 //   R2           : 駆動の速さ(押し込むほど速い。最大 kDriveMaxRadps)。use_drive:=true の時だけ
+//                  スティックを倒していない時にR2を押すと、今の車輪の向き(最後に向けた向き)の
+//                  まま駆動する
 //   Options      : E-STOP(R1を離して押し直すと再開)
 //   △           : 原点合わせを始める(R1を押したまま。終わるか失敗するまでスティックは効かない)
 //   ※起動してモータと通信できたら、最初にR1を押した時に自動で1回だけ原点合わせをする
@@ -90,7 +92,8 @@
 //   を足して送る(傘歯車や 23:33 の比には関係しない)。
 //   drive_coupling の大きさは 1.0(上の歯車が1:1)、向き(+か−か)は実機で決める:
 //     車輪を浮かせ use_drive:=true drive_coupling:=1.0 で操舵だけ回し、車輪がほぼ止まって
-//     いれば +1.0、0 の時より大きく回るなら −1.0。既定は 0(打ち消さない)。
+//     いれば +1.0、0 の時より大きく回るなら −1.0。
+//   2026-11-19 実機で −1.0 が正しいと確かめたので、既定は −1.0(0 にすると打ち消さない)。
 //   操舵の速さは操舵モータの帰還の速度から求める。操舵が止まって kCouplingHoldSec たつと
 //   駆動は脱力に戻る。原点合わせの間は打ち消さない(駆動は脱力)。
 //
@@ -106,7 +109,7 @@
 // ■ パラメータ
 //   use_drive         : 駆動(DM3519)も使うか(既定 false)
 //   origin_offset_deg : 原点センサーがONになる所の車輪の向き[°](前 = 0、右 = +90。既定 0)
-//   drive_coupling    : 操舵と駆動のつながりの打ち消し(上の説明。既定 0 = 打ち消さない。±1.0 を入れる)
+//   drive_coupling    : 操舵と駆動のつながりの打ち消し(上の説明。既定 −1.0(実機で確認済み)。0 = 打ち消さない)
 // =====================================================================
 
 #include <algorithm>
@@ -237,9 +240,24 @@ public:
       [this](const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
         if (msg->data.size() >= 6) {
           const auto t = std::chrono::steady_clock::now();
+          const bool ok = msg->data[4] > 0.5f;
+          // 始める前(locked_ でない間)は、帰還が無い・途切れた後の値でつなぎ合わせない。
+          // ノードを起動してからESCの24Vを入れると、帰還が無い間の値(0など)から、電源が入った
+          // ESCの本当の位置へ一気に飛ぶため、ここでつなぎ合わせをやり直す。
+          if (!locked_ &&
+            (!ok || (have_pos_ && t - last_state_time_ > std::chrono::milliseconds(100))))
+          {
+            have_pos_ = false;
+            ok_since_ = t;
+          }
+          if (ok && !feedback_ok_) {
+            ok_since_ = t;  // 帰還が来始めた時刻
+          }
           position_ = msg->data[0];
           // 位置をつなぎ合わせる(帰還の位置は±kPosWrapRadで一周する)
-          if (!have_pos_) {
+          if (!ok && !locked_) {
+            // 帰還が無い時の値は使わない(次に帰還が来た時に、そこからつなぎ合わせる)
+          } else if (!have_pos_) {
             unwrapped_ = position_;
             have_pos_ = true;
           } else {
@@ -261,7 +279,7 @@ public:
           velocity_ = msg->data[1];
           torque_ = msg->data[2];
           state_ = static_cast<int>(msg->data[3]);
-          feedback_ok_ = msg->data[4] > 0.5f;
+          feedback_ok_ = ok;
           internal_pos_ = msg->data[5];
           last_state_time_ = t;
         }
@@ -299,6 +317,19 @@ public:
     const auto age = std::chrono::steady_clock::now() - last_state_time_;
     return feedback_ok_ && age < 300ms;
   }
+  // 帰還が kSettleSec 以上続けて届いているか(始める前の確認用。24Vを入れた直後の値を避ける)
+  bool settled() const
+  {
+    return ready() && have_pos_ &&
+      std::chrono::steady_clock::now() - ok_since_ >= std::chrono::milliseconds(500);
+  }
+  // 始める時に呼ぶ。ここまでの数え間違いの印を消し、以後はつなぎ合わせをやり直さない
+  // (始めた後の帰還の抜けは、数え間違い・返事の途絶として止める)
+  void lock_position()
+  {
+    locked_ = true;
+    pos_jump_ = false;
+  }
   // 角度制御を使ってよいか(モータ内部の位置が分かっていて±12rad以内)
   bool angle_ok() const {return !std::isnan(internal_pos_) && std::abs(internal_pos_) <= 12.0;}
   int number() const {return number_;}
@@ -316,6 +347,8 @@ private:
   double last_raw_pos_{0.0};
   double unwrapped_{0.0};
   bool pos_jump_{false};
+  bool locked_{false};          // 始めた後か(true ならつなぎ合わせをやり直さない)
+  std::chrono::steady_clock::time_point ok_since_{};  // 帰還が来始めた時刻
   double vel_integral_{0.0};
   std::chrono::steady_clock::time_point last_state_time_{};
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr cmd_pub_;
@@ -337,7 +370,7 @@ public:
       RCLCPP_WARN(get_logger(), "駆動(DM3519)も使います。車輪を浮かせ、すぐ止められるようにしてください");
     }
     origin_offset_rad_ = declare_parameter<double>("origin_offset_deg", 0.0) * M_PI / 180.0;
-    drive_coupling_ = declare_parameter<double>("drive_coupling", 0.0);
+    drive_coupling_ = declare_parameter<double>("drive_coupling", -1.0);
     if (use_drive_ && drive_coupling_ != 0.0) {
       RCLCPP_WARN(get_logger(), "操舵と駆動のつながりを打ち消します(drive_coupling=%+.2f)。"
         "操舵だけ回している時も駆動に力が出ます", drive_coupling_);
@@ -649,7 +682,9 @@ private:
   {
     double drive_target = 0.0;
     const double mag = std::hypot(ls_x_, ls_y_);
-    if (mag > kStickDeadzone) {
+    const bool stick_on = mag > kStickDeadzone;
+    const bool r2_on = use_drive_ && r2_ > kR2OnThreshold;
+    if (stick_on) {
       const double heading = std::atan2(ls_x_, ls_y_);  // 上=0、右=+90°
       if (kSteerVel) {
         // 速度制御: 今の目標から一番近い回り方で向ける(何周でもよい。逆転しない)
@@ -664,12 +699,11 @@ private:
           steer_reverse_ = reverse;
         }
       }
-      // 操舵が目標の向きに着いてから駆動する(ずれは車輪の向きで比べる)
-      if (use_drive_ && r2_ > kR2OnThreshold &&
-        std::abs(steer_pos() - steer_target_) / kSteerGear < kAlignTolRad)
-      {
-        drive_target = kDriveSign * (steer_reverse_ ? -1.0 : 1.0) * r2_ * kDriveMaxRadps;
-      }
+    }
+    // スティックを倒していない時は向きの目標を変えない(今の向きのまま駆動する)。
+    // 操舵が目標の向きに着いてから駆動する(ずれは車輪の向きで比べる)
+    if (r2_on && std::abs(steer_pos() - steer_target_) / kSteerGear < kAlignTolRad) {
+      drive_target = kDriveSign * (steer_reverse_ ? -1.0 : 1.0) * r2_ * kDriveMaxRadps;
     }
     // 加速度を制限して、指令を急に変えない(前進⇔後退も必ずゆっくり0を通る)
     const double step = kDriveAccelRadps2 * kPeriodSec;
@@ -786,13 +820,16 @@ private:
     if (!started_) {
       // 始める前の確認: 使うモータの返事が届くまで待つ(5秒待っても来なければやめる)
       // 操舵だけの時は、駆動の返事は待たない(駆動のESCの電源が切れていてもよい)
-      if (steer_.ready() && (!use_drive_ || drive_.ready())) {
+      // 24Vを入れた直後の値を避けるため、帰還が0.5秒続けて届いてから始める
+      if (steer_.settled() && (!use_drive_ || drive_.settled())) {
         if (!kSteerVel && !steer_.angle_ok()) {
           RCLCPP_ERROR(get_logger(), "操舵(モータ1)の内部の位置が±12radを超えている(または不明)"
             "ので、角度制御が使えません。ESCの電源を入れ直してください");
           finish();
           return;
         }
+        steer_.lock_position();
+        drive_.lock_position();
         steer_zero_ = steer_pos();  // 起動時の向きを「スティック上」にする
         steer_target_ = steer_zero_;
         started_ = true;
@@ -1030,7 +1067,7 @@ private:
   bool steer_reverse_{false};  // 車輪を逆転させているか
   double drive_cmd_{0.0};      // R2による駆動の速度[rad/s](加速度制限後。打ち消しは含まない)
   double drive_out_{0.0};      // 実際に駆動へ送っている速度[rad/s](drive_cmd_ + 打ち消し)
-  double drive_coupling_{0.0}; // パラメータ drive_coupling(操舵と駆動のつながりの打ち消し)
+  double drive_coupling_{-1.0}; // パラメータ drive_coupling(操舵と駆動のつながりの打ち消し)
   double coupling_cmd_{0.0};   // 打ち消しの量[駆動モータ rad/s]
   std::chrono::steady_clock::time_point coupling_until_{};  // この時刻まで打ち消しのため駆動を有効にする
   bool use_drive_{false};      // パラメータ use_drive(false = 操舵だけ)
