@@ -1,12 +1,12 @@
 // トピックで最後に受け取った値と、その時刻。
 // 「一定時間届かなければ止める」判定を、各ノードで書かなくて済むようにする。
 
-#ifndef NR27_BR_HW_CTRL__LATEST_VALUE_HPP_
-#define NR27_BR_HW_CTRL__LATEST_VALUE_HPP_
+#ifndef BR_DOKUSUTE__LATEST_VALUE_HPP_
+#define BR_DOKUSUTE__LATEST_VALUE_HPP_
 
 #include "rclcpp/rclcpp.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 template <typename T>
 class LatestValue {
@@ -32,6 +32,6 @@ class LatestValue {
   bool has_value_ = false;
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
-#endif  // NR27_BR_HW_CTRL__LATEST_VALUE_HPP_
+#endif  // BR_DOKUSUTE__LATEST_VALUE_HPP_

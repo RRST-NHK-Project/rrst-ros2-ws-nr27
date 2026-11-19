@@ -16,14 +16,14 @@
 #include <memory>
 #include <string>
 
-#include "nr27_br_hw_ctrl/latest_value.hpp"
-#include "nr27_br_hw_ctrl/stop_on_shutdown.hpp"
+#include "br_dokusute/latest_value.hpp"
+#include "br_dokusute/stop_on_shutdown.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 constexpr size_t kTxSlotCount = 24;
 constexpr double kSpeedFilterGain = 0.3;  // 速度ローパスの新しい値の重み
@@ -112,11 +112,11 @@ class Drive735Node : public rclcpp::Node {
   std::unique_ptr<StopOnShutdown> stop_;
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<nr27_br_hw_ctrl::Drive735Node>());
+  rclcpp::spin(std::make_shared<br_dokusute::Drive735Node>());
   rclcpp::shutdown();
   return 0;
 }

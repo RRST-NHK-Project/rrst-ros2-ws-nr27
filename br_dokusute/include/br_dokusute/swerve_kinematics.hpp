@@ -2,10 +2,10 @@
 //
 // 座標系はROSと同じ: x=前, y=左, 角度は反時計回りが正, 前向きが0。
 
-#ifndef NR27_BR_HW_CTRL__SWERVE_KINEMATICS_HPP_
-#define NR27_BR_HW_CTRL__SWERVE_KINEMATICS_HPP_
+#ifndef BR_DOKUSUTE__SWERVE_KINEMATICS_HPP_
+#define BR_DOKUSUTE__SWERVE_KINEMATICS_HPP_
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 // ロボット全体の速度指令 (cmd_vel の vx, vy, wz)。
 struct BodyVelocity {
@@ -36,6 +36,6 @@ WheelCommand ComputeWheelVelocity(const BodyVelocity& body, double x, double y);
 WheelCommand ChooseSteerAngle(double goal_angle, double current_angle,
                               double steer_limit);
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
-#endif  // NR27_BR_HW_CTRL__SWERVE_KINEMATICS_HPP_
+#endif  // BR_DOKUSUTE__SWERVE_KINEMATICS_HPP_

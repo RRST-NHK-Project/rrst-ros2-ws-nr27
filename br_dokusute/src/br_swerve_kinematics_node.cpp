@@ -14,12 +14,12 @@
 #include <memory>
 
 #include "geometry_msgs/msg/twist.hpp"
-#include "nr27_br_hw_ctrl/latest_value.hpp"
-#include "nr27_br_hw_ctrl/swerve_kinematics.hpp"
+#include "br_dokusute/latest_value.hpp"
+#include "br_dokusute/swerve_kinematics.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 // これ未満の車輪速度ではステア目標を更新しない [m/s]。
 // 速度0付近では atan2 の向きが定まらず、ステアが暴れるため。
@@ -97,11 +97,11 @@ class SwerveKinematicsNode : public rclcpp::Node {
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr speed_target_pub_;
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<nr27_br_hw_ctrl::SwerveKinematicsNode>());
+  rclcpp::spin(std::make_shared<br_dokusute::SwerveKinematicsNode>());
   rclcpp::shutdown();
   return 0;
 }

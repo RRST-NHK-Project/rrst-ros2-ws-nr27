@@ -4,9 +4,9 @@
 
 #include <vector>
 
-#include "nr27_br_hw_ctrl/damiao_slots.hpp"
+#include "br_dokusute/damiao_slots.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 namespace damiao {
 namespace {
 
@@ -61,6 +61,18 @@ TEST(DamiaoSlotsTest, FaultStates) {
   EXPECT_TRUE(IsFault(15));  // ESP32が止めている
 }
 
+TEST(DamiaoSlotsTest, PhotoSensorFollowsFirmwareValues) {
+  auto rx = Zeros();
+  EXPECT_FALSE(IsPhotoSensorBlocked(rx).has_value());  // 0 = 未対応・未確定
+  rx[23] = 1;
+  EXPECT_EQ(IsPhotoSensorBlocked(rx), false);  // 入光
+  rx[23] = 2;
+  EXPECT_EQ(IsPhotoSensorBlocked(rx), true);  // 遮光
+  rx[23] = 7;
+  EXPECT_FALSE(IsPhotoSensorBlocked(rx).has_value());
+  EXPECT_FALSE(IsPhotoSensorBlocked(std::vector<int16_t>(23, 2)).has_value());
+}
+
 }  // namespace
 }  // namespace damiao
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute

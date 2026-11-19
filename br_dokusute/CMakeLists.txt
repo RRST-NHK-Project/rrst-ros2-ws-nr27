@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(nr27_br_hw_ctrl)
+project(br_dokusute)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -43,6 +43,11 @@ add_executable(br_drive_735 src/br_drive_735_node.cpp)
 target_include_directories(br_drive_735 PRIVATE include)
 ament_target_dependencies(br_drive_735 rclcpp std_msgs)
 
+# センサ (確認用)
+add_executable(br_photo_sensor src/br_photo_sensor_node.cpp)
+target_include_directories(br_photo_sensor PRIVATE include)
+ament_target_dependencies(br_photo_sensor rclcpp std_msgs)
+
 install(TARGETS
   br_joy_teleop
   br_swerve_kinematics
@@ -50,6 +55,7 @@ install(TARGETS
   dob_node
   br_steer_dm2325
   br_drive_735
+  br_photo_sensor
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})

@@ -1,9 +1,9 @@
-#include "nr27_br_hw_ctrl/swerve_kinematics.hpp"
+#include "br_dokusute/swerve_kinematics.hpp"
 
 #include <cmath>
 #include <limits>
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 WheelCommand ComputeWheelVelocity(const BodyVelocity& body, double x,
                                   double y) {
@@ -34,4 +34,4 @@ WheelCommand ChooseSteerAngle(double goal_angle, double current_angle,
   return best;
 }
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute

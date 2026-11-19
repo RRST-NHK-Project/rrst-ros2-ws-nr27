@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>nr27_br_hw_ctrl</name>
+  <name>br_dokusute</name>
   <version>0.0.0</version>
   <description>NR27 BR hardware control (independent steering swerve drive)</description>
   <maintainer email="riko26maeda@gmail.com">dev</maintainer>

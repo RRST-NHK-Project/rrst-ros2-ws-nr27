@@ -13,11 +13,11 @@
 #include <memory>
 
 #include "common/PID.hpp"
-#include "nr27_br_hw_ctrl/latest_value.hpp"
+#include "br_dokusute/latest_value.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 class PidNode : public rclcpp::Node {
  public:
@@ -79,11 +79,11 @@ class PidNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<nr27_br_hw_ctrl::PidNode>());
+  rclcpp::spin(std::make_shared<br_dokusute::PidNode>());
   rclcpp::shutdown();
   return 0;
 }

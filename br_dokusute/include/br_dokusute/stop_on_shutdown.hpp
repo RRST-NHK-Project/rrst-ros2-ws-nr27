@@ -7,8 +7,8 @@
 // 使い方: メンバに持ち、通常の送信の先頭で is_stopping() を見て、
 // true なら何も送らない (停止指令を上書きしないため)。
 
-#ifndef NR27_BR_HW_CTRL__STOP_ON_SHUTDOWN_HPP_
-#define NR27_BR_HW_CTRL__STOP_ON_SHUTDOWN_HPP_
+#ifndef BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
+#define BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
 
 #include <atomic>
 #include <chrono>
@@ -17,7 +17,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 class StopOnShutdown {
  public:
@@ -57,6 +57,6 @@ class StopOnShutdown {
   std::atomic<bool> stopping_{false};
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
-#endif  // NR27_BR_HW_CTRL__STOP_ON_SHUTDOWN_HPP_
+#endif  // BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_

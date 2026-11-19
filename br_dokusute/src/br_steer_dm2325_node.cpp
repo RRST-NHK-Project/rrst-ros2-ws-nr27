@@ -20,15 +20,15 @@
 #include <string>
 #include <vector>
 
-#include "nr27_br_hw_ctrl/damiao_slots.hpp"
-#include "nr27_br_hw_ctrl/latest_value.hpp"
-#include "nr27_br_hw_ctrl/stop_on_shutdown.hpp"
+#include "br_dokusute/damiao_slots.hpp"
+#include "br_dokusute/latest_value.hpp"
+#include "br_dokusute/stop_on_shutdown.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 
 class DmSteerNode : public rclcpp::Node {
  public:
@@ -158,11 +158,11 @@ class DmSteerNode : public rclcpp::Node {
   std::unique_ptr<StopOnShutdown> stop_;
 };
 
-}  // namespace nr27_br_hw_ctrl
+}  // namespace br_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<nr27_br_hw_ctrl::DmSteerNode>());
+  rclcpp::spin(std::make_shared<br_dokusute::DmSteerNode>());
   rclcpp::shutdown();
   return 0;
 }

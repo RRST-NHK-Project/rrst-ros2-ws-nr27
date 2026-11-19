@@ -18,16 +18,19 @@
 //   3: position    (0.001 rad/LSB、±12.5rad=P_MAX で折り返す)
 //   4: velocity    (0.01 rad/s/LSB)
 //   5: torque      (0.001 N・m/LSB)
+//
+// 帰還の23番は、操舵の原点のフォトセンサ (下の GetPhotoSensor)。
 
-#ifndef NR27_BR_HW_CTRL__DAMIAO_SLOTS_HPP_
-#define NR27_BR_HW_CTRL__DAMIAO_SLOTS_HPP_
+#ifndef BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
+#define BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
-namespace nr27_br_hw_ctrl {
+namespace br_dokusute {
 namespace damiao {
 
 constexpr size_t kSlotCount = 24;
@@ -84,7 +87,36 @@ inline Feedback GetFeedback(const std::vector<int16_t>& rx, size_t motor) {
   return fb;
 }
 
-}  // namespace damiao
-}  // namespace nr27_br_hw_ctrl
+// ---- 操舵の原点のフォトセンサ (NPN、黒線 = 遮光時ON) ----
+// ESP32 (soki_damiao_201) が帰還の kPhotoSensorSlot 番に入れる。値の決まりは
+// ros2can のブランチ feature/damiao-per-motor-maxvel の damiao.cpp
+// (DAMIAO_ORIGIN_SENSOR_SLOT) と、br_drive の origin_sensor_node に合わせてある:
+//   0 = センサを読まないファーム、またはまだ値が決まっていない
+//   1 = 入光 (スリットは空)
+//   2 = 遮光 (スリットに物がある = 原点)
+// 黒線の断線・センサの電源切れも 1 (入光) に見え、区別できない。
+// モータの帰還と同じ帯にあるので、モータが4台のときは使えない
+// (ファームの static_assert が止める)。
+constexpr size_t kPhotoSensorSlot = 23;
+constexpr int16_t kPhotoSensorClear = 1;
+constexpr int16_t kPhotoSensorBlocked = 2;
 
-#endif  // NR27_BR_HW_CTRL__DAMIAO_SLOTS_HPP_
+// 遮光中なら true、入光なら false。値が決まっていない・決まりに無い値なら
+// nullopt (0 を「入光」とみなすと、センサの無いファームで原点を見落とす)。
+inline std::optional<bool> IsPhotoSensorBlocked(
+    const std::vector<int16_t>& rx) {
+  if (rx.size() <= kPhotoSensorSlot) return std::nullopt;
+  switch (rx[kPhotoSensorSlot]) {
+    case kPhotoSensorBlocked:
+      return true;
+    case kPhotoSensorClear:
+      return false;
+    default:
+      return std::nullopt;
+  }
+}
+
+}  // namespace damiao
+}  // namespace br_dokusute
+
+#endif  // BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
