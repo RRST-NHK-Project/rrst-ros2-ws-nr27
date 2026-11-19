@@ -2,6 +2,8 @@
 
 NHKロボコン2027 TR の ROS 2 (Jazzy, Ubuntu 24.04) ワークスペース。
 パッケージは `tr_dokusute` (独立ステア足回りの制御)・`nr27_sensors` (LiDAR)・`nr27_localization` (自己位置)。
+`common` は `~/rrst-ros2-ws/common` (ヘッダだけ。`PID.hpp` など) のコピー (2026-11-20)。GitHub Actions のビルドで
+`rrst-ros2-ws` が無くても `tr_dokusute` が通るように入れた。元が変わったらコピーし直す。
 シム・作戦・フィールドの寸法は本人の別ワークスペース `~/dev_ws` (Gazebo、ルールブック V1.1) にある。
 **dev_ws は BR (完全自動) のシム。** このワークスペースの機体は TR (2026-11-20 に TR と BR を取り違えていたと分かった)。
 dev_ws の作戦・L1/L2 の話をそのまま TR に当てはめない (TR はグラウンドとトランスファーまで【3.2.1】)。
