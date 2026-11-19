@@ -1,0 +1,50 @@
+# AMCL (nav2_amcl) の設定。値は dev_ws の config/localization.yaml (シムで多数回の走行で確かめた値) に揃えた。
+# 違うのは運動モデル (独ステなので Omni) だけ。scan_topic・初期姿勢・use_sim_time は launch が上書きする。
+amcl:
+  ros__parameters:
+    # tf の分担 (dev_ws の決定事項4): map -> odom は AMCL だけ、odom -> base_link はオドメトリ
+    # (シムでは Gazebo)。同じ変換を2か所から出さない
+    global_frame_id: map
+    odom_frame_id: odom
+    base_frame_id: base_link
+    scan_topic: scan
+
+    # 独ステは横にも動けるので Omni (差動二輪の Differential では横移動を誤差とみなす)
+    robot_model_type: nav2_amcl::OmniMotionModel
+    alpha1: 0.2   # 回転 → 回転
+    alpha2: 0.2   # 並進 → 回転
+    alpha3: 0.2   # 並進 → 並進
+    alpha4: 0.2   # 回転 → 並進
+    alpha5: 0.2   # 横移動 (Omni のみ)
+
+    min_particles: 500
+    max_particles: 2000
+    pf_err: 0.05
+    pf_z: 0.99
+    # 見失ったときに粒子をばらまく回復は切る (dev_ws の決定事項11)。有効だと、当たる点の多くが
+    # 地図に無い物になる所 (ストレージの前) で、ばらまいた粒子に推定が 2 m 跳んだ
+    recovery_alpha_slow: 0.0
+    recovery_alpha_fast: 0.0
+
+    laser_model_type: likelihood_field
+    laser_min_range: 0.15
+    laser_max_range: 12.0
+    max_beams: 120
+    sigma_hit: 0.2
+    z_hit: 0.5
+    z_rand: 0.5
+    z_max: 0.05
+    z_short: 0.05
+    laser_likelihood_max_dist: 2.0
+
+    update_min_a: 0.1
+    update_min_d: 0.1
+    resample_interval: 1
+    transform_tolerance: 0.5
+    do_beamskip: false
+
+    # 初期姿勢は launch の x / y / yaw。試合では開始位置が決まっているので与える前提
+    set_initial_pose: true
+    always_reset_initial_pose: false
+    # 階を切り替えるとき (/map_server/load_map) に新しい地図を読む
+    first_map_only: false

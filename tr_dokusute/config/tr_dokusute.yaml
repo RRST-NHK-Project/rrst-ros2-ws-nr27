@@ -1,0 +1,41 @@
+# NR27 TR 独ステ1ユニットの試験用設定 (ノード名がキー)
+# 【仮置き】と書いた値は実機で必ず合わせること。
+
+tr_swerve_kinematics:
+  ros__parameters:
+    module_x: 0.25       # 【仮置き】ロボット中心からの位置 [m] (前が+)
+    module_y: 0.25       # 【仮置き】(左が+)
+    steer_limit: 3.14159  # ステアの可動範囲 ±[rad] (配線ねじれ防止。pi/2以上)
+
+tr_steer_dm2325:
+  ros__parameters:
+    device_id: 201       # ros2can MODE_DAMIAO の DEVICE_ID (CAN線はDamiao専用)
+    motor_index: 1       # config.hpp の DAMIAO_MOTORS の行 (0始まり)。
+    #                      今つないでいるESCは2行目 (ESC_ID 0x02 / MST_ID 0x012) として応答する
+    gear_ratio: 1.0      # 【仮置き】出力軸→ステア軸の減速比。直結なら1.0
+    sign: 1              # 【仮置き】DMの+回転でステアが反時計回りなら1、逆なら-1
+    offset_rad: 0.0      # 車輪が前を向くときのDM位置 [rad, 出力軸]
+    #                      ros2 service call /steer/set_zero std_srvs/srv/Trigger
+    #                      で今の向きを登録できる (値はログに出る。保存はされない)
+    vel_limit: 5.0       # 移動速度の上限 [rad/s, 出力軸] 初回は控えめ (ファーム上限45.6)
+
+tr_drive_735:
+  ros__parameters:
+    device_id: 1         # 【仮置き】ros2can CAN_HOST の DEVICE_ID
+    tx_slot: 0           # MES基板 MD1 (ノード番号*5+0)
+    rx_slot: 1           # MES基板 ENC1 (ノード番号*5+1)
+    wheel_radius: 0.05   # 【仮置き】[m]
+    counts_per_rev: 1024.0  # 【仮置き】車輪1回転のENCカウント (PCNTは1逓倍)
+    duty_sign: 1         # 【仮置き】+dutyで前進なら1
+    encoder_sign: 1      # 【仮置き】前進でカウントが増えるなら1
+    duty_max: 255.0      # MD_PWM_MAX (8bit)
+
+# 駆動の速度制御 (setpoint=drive/speed_target, measurement=drive/speed, output=drive/duty)
+tr_pid:
+  ros__parameters:
+    kff: 127.5           # 【仮置き】目標速度1 m/s あたりのduty (= 255 / 最高速度2.0m/s)
+    kp: 0.0              # 初めは0 (フィードフォワードだけ)。エンコーダが合ってから上げる
+    ki: 0.0
+    kd: 0.0
+    integral_limit: 50.0
+    output_limit: 255.0

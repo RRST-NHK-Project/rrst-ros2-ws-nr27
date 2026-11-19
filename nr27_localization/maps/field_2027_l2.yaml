@@ -1,0 +1,7 @@
+image: field_2027_l2.pgm
+mode: trinary
+resolution: 0.05
+origin: [-2.0000, -2.0000, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

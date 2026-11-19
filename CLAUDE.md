@@ -1,35 +1,53 @@
 # CLAUDE.md
 
-NHKロボコン2027 BR の ROS 2 (Jazzy, Ubuntu 24.04) ワークスペース。
-現状のパッケージは `nr27_br_hw_ctrl` (独立ステア足回りの制御) のみ。
+NHKロボコン2027 TR の ROS 2 (Jazzy, Ubuntu 24.04) ワークスペース。
+パッケージは `tr_dokusute` (独立ステア足回りの制御)・`nr27_sensors` (LiDAR)・`nr27_localization` (自己位置)。
+シム・作戦・フィールドの寸法は本人の別ワークスペース `~/dev_ws` (Gazebo、ルールブック V1.1) にある。
+**dev_ws は BR (完全自動) のシム。** このワークスペースの機体は TR (2026-11-20 に TR と BR を取り違えていたと分かった)。
+dev_ws の作戦・L1/L2 の話をそのまま TR に当てはめない (TR はグラウンドとトランスファーまで【3.2.1】)。
 今は**独ステ1ユニットの動作確認**の段階。機能は最小限にとどめる。
 
-## ノード構成 (`nr27_br_hw_ctrl`)
+**独ステのパッケージは2つあり、機体が違う。** `tr_dokusute` は TR、`br_drive` (Kaho-YAMAMOTO) は BR の独ステ。
+`br_drive` は BR 担当の本人のパッケージなので、名前も中身も変えない。こちらは `nr27_br_hw_ctrl` → `br_dokusute` (2026-11-19)
+→ `tr_dokusute` (2026-11-20、機体が TR と分かったため) と改名した。
+
+| | `tr_dokusute` (TR、silby72) | `br_drive` (BR、Kaho-YAMAMOTO) |
+|---|---|---|
+| 駆動モータ | マブチ735 + MES基板 (コードの想定。実機で確認していない) | DM3519 (`damiao_ctrl` の `damiao_driver_node` 経由) |
+| 入力 | `cmd_vel` (上位の自動走行につなげる) | PS4 を直接読む1ノード (`infinite_ctrl_node`) |
+| 参考になる実機の知見 | — | 操舵と駆動のつながりの打ち消し、原点センサー、DM3519 の発煙 (11/17) と見張り。歯車比などは BR の値なので写さない |
+
+`tr_photo_sensor` の値の決まり (`serial_rx_201` の23番、1 = 入光 / 2 = 遮光) は、BR の ESP32 のファーム
+(ros2can のブランチ `feature/damiao-per-motor-maxvel` の soki_damiao_201) に合わせたもの。TR の ESP32 で使うなら、
+同じ実装を TR 用のファームにも入れ、DEVICE_ID が BR と重ならないようにする (`tr_dokusute.yaml` の `device_id: 201` は【仮置き】)。
+
+## ノード構成 (`tr_dokusute`)
 
 機能ごとにノードを分ける。ノードを足すときも、役割を混ぜない。
 
 | 分類 | ノード | 役割 |
 |---|---|---|
-| 入力 | `br_joy_teleop` | PS4 → `cmd_vel` (R1を押している間だけ) |
-| 計算 | `br_swerve_kinematics` | `cmd_vel` → ステア角の目標・車輪速度の目標 (有限ステア) |
-| 計算 | `br_pid` | 汎用PID+フィードフォワード。launchでremapして使う |
+| 入力 | `tr_joy_teleop` | PS4 → `cmd_vel` (R1を押している間だけ) |
+| 計算 | `tr_swerve_kinematics` | `cmd_vel` → ステア角の目標・車輪速度の目標 (有限ステア) |
+| 計算 | `tr_pid` | 汎用PID+フィードフォワード。launchでremapして使う |
 | 計算 | `dob_node` | 外乱オブザーバ (独立。1ユニット試験では使わない。`odom`が要る) |
-| 機構 | `br_steer_dm2325` | DM2325 ステア。目標角 → ros2can |
-| 機構 | `br_drive_735` | マブチ735 駆動。duty → ros2can、エンコーダから速度 |
+| 機構 | `tr_steer_dm2325` | DM2325 ステア。目標角 → ros2can |
+| 機構 | `tr_drive_735` | マブチ735 駆動。duty → ros2can、エンコーダから速度 |
+| センサ | `tr_photo_sensor` | 操舵の原点のフォトセンサ (serial_rx_201 の23番) → `photo_sensor/blocked`。確認用 |
 
 ```
-joy → cmd_vel → br_swerve_kinematics ─ steer/angle_target → br_steer_dm2325 ⇄ ros2can(201)
+joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2325 ⇄ ros2can(201)
                      ↑ steer/angle ───────────────────────────────┘
-                     └ drive/speed_target → br_pid → drive/duty → br_drive_735 ⇄ ros2can(駆動)
+                     └ drive/speed_target → tr_pid → drive/duty → tr_drive_735 ⇄ ros2can(駆動)
                                               ↑ drive/speed ───────────┘
 ```
 
-- 起動は `ros2 launch nr27_br_hw_ctrl unit_test.launch.py` (ros2can を別ターミナルで先に起動)
-- 設定は `config/br_hw_ctrl.yaml` (ノード名がキー)
+- 起動は `ros2 launch tr_dokusute unit_test.launch.py` (ros2can を別ターミナルで先に起動)
+- 設定は `config/tr_dokusute.yaml` (ノード名がキー)
 - 計算の中身はROSに依存しない `swerve_kinematics.hpp/.cpp` に置き、gtestを書く
 - **チーム共通の `common` (`rrst-ros2-ws/common`) を先に探して使う。** 自作する前に
   `common/include/common/` に無いか見ること。今使っているのは `common/PID.hpp` の `PIDController`
-  (`br_pid`)。`common/common.hpp` は存在しない `IK.hpp` を include しているので使わず、
+  (`tr_pid`)。`common/common.hpp` は存在しない `IK.hpp` を include しているので使わず、
   必要なヘッダを個別に include する。`PacketController` / `Ros2CanPacketController` は
   DM2325 (MODE_DAMIAO) と MES基板のMD1+ENC1 に対応していないので、`damiao_slots.hpp` と
   各ノードのスロット番号は自前
@@ -47,15 +65,15 @@ joy → cmd_vel → br_swerve_kinematics ─ steer/angle_target → br_steer_dm2
 ```bash
 # ビルド (ワークスペースルートで)
 # common (rrst-ros2-ws/common) はこのワークスペースに無いので --base-paths で足す
-colcon build --base-paths . ../rrst-ros2-ws/common --packages-up-to nr27_br_hw_ctrl
+colcon build --base-paths . ../rrst-ros2-ws/common --packages-up-to tr_dokusute
 source install/setup.bash
 
 # テスト (gtest + cpplint + flake8/pep257 など)
-colcon test --base-paths . ../rrst-ros2-ws/common --packages-select nr27_br_hw_ctrl
-colcon test-result --verbose --test-result-base build/nr27_br_hw_ctrl
+colcon test --base-paths . ../rrst-ros2-ws/common --packages-select tr_dokusute
+colcon test-result --verbose --test-result-base build/tr_dokusute
 
 # C++ の整形 (.clang-format = Google)
-clang-format -i nr27_br_hw_ctrl/src/*.cpp nr27_br_hw_ctrl/include/nr27_br_hw_ctrl/*.hpp nr27_br_hw_ctrl/test/*.cpp
+clang-format -i tr_dokusute/src/*.cpp tr_dokusute/include/tr_dokusute/*.hpp tr_dokusute/test/*.cpp
 ```
 
 ## コーディング規約
@@ -74,9 +92,9 @@ https://google.github.io/styleguide/cppguide.html
   - 関数は短く、1つの役割にする。長くなったら名前の付いた関数に分ける
 - このリポジトリでの例外 (ROS 2 の慣習に合わせる):
   - 拡張子は `.hpp` / `.cpp`
-  - インクルードガードは ament_cpplint の形式 `NR27_BR_HW_CTRL__FILE_NAME_HPP_`
+  - インクルードガードは ament_cpplint の形式 `TR_DOKUSUTE__FILE_NAME_HPP_`
   - 著作権表記のチェック (`legal/copyright`) は、方針が決まるまで外している
-- 動作確認用の簡単なノード (例: `br_joy_teleop_node.cpp`) は、チームで読み慣れた nr26
+- 動作確認用の簡単なノード (例: `tr_joy_teleop_node.cpp`) は、チームで読み慣れた nr26
   (`~/rrst-ros2-ws-nr26/nr26_r1_hw_ctrl/src/R1_SwerveDrive.cpp`) の書き方に合わせる:
   設定値は先頭の `#define`、joy は `ps4_listener_callback` で全ボタンを変数に並べてから使う
   (使わないものはコメントアウト)、`main` で figlet を表示。機能は必要最小限にする
@@ -115,12 +133,42 @@ docstring は1行目を空けて書き、要約は `.` で終える)。
   複数ノードが送ると互いの担当外スロットを0で上書きする (1ユニット試験では、ステアと駆動でIDが別なので問題ない)
 - **終了時の停止指令は pre-shutdown コールバックで送る。** `rclcpp::on_shutdown` や spin の後の publish は
   通信が切れた後なので届かない (damiao_ctrl で2026-10-14に実機確認)
-- DMモータは全ゼロ (= DISABLE) が安全な既定値。`br_steer_dm2325` は故障をラッチし、
+- DMモータは全ゼロ (= DISABLE) が安全な既定値。`tr_steer_dm2325` は故障をラッチし、
   ノードを再起動するまで DISABLE のままにする (故障のまま有効化を繰り返さないため)
 - 実機のモータを動かすコードなので、スロット割り当て・スケール・上限 (duty_max, 速度上限)・
   タイムアウト・停止処理に関わる変更は、意図しない動作につながりうることをユーザーに明示する
-- 実機の値が決まっていないパラメータは `config/br_hw_ctrl.yaml` で【仮置き】と書いてある。
+- 実機の値が決まっていないパラメータは `config/tr_dokusute.yaml` で【仮置き】と書いてある。
   勝手に確定値として扱わない
+
+## 自己位置 (`nr27_localization`)
+
+LiDAR + AMCL (nav2_amcl)。地図は走って作らず、**dev_ws (`~/dev_ws`、本人のシム環境) の world から作ったものを取り込む。**
+フィールドの寸法の正本は dev_ws の `make_field.py` (ルールブック V1.1・付録の図面に合わせてある)。nr27 に寸法を書き写さない。
+
+```bash
+# 実機 (UST-30LX)
+ros2 launch nr27_localization localization.launch.py x:=-4.1 y:=-4.8 yaw:=1.5708
+# dev_ws のシムとつなぐ (先に別端末で: ros2 launch robocon2027_sim sim.launch.py world:=field_2027 drive:=omni
+#   x:=-4.1 y:=-4.8 yaw:=1.5708。dev_ws と nr27 の両方の install を source する)
+ros2 launch nr27_localization localization.launch.py sim:=true x:=-4.1 y:=-4.8 yaw:=1.5708
+# world が変わったら地図を取り込み直してコミットする (引数は床から LiDAR までの高さ、既定 0.185 m)
+nr27_localization/scripts/import_dev_ws_maps.sh
+```
+
+- 地図は `maps/field_2027_{ground,l1,l2}`。dev_ws の `sdf_to_map.py` を dev_ws/docs/field.md と同じ引数で流す。
+  高さ 0.185 m なら dev_ws の地図と1マスも違わない (2026-11-18 に確認)。出どころは `maps/SOURCE.md`
+- 座標は dev_ws と同じ: 原点はフィールド中央、赤が西 (-x)、北が +y。赤のスタートゾーンは (-4.1, -4.8) で北向き
+- `sim:=true` の違いは、スキャンが `/scan`、`use_sim_time`、odom -> base_link を Gazebo が出すこと。
+  **dev_ws の `localization.launch.py` と同時に上げない** (map -> odom が2か所から出る)
+- AMCL の値は dev_ws の `config/localization.yaml` (シムで確かめた値) と同じで、運動モデルだけ Omni
+- 階 (level) ごとに地図が違う。走りながらの切り替えはまだ無い。dev_ws は `switch_layer.py` で地図の差し替えと
+  `/initialpose` を行い、**L2 では AMCL を止める** (L2 で LiDAR に写るのはセントラルピラーだけ)
+- **LiDAR に写らない柵が多い。** V1.1 の付録で L1 外周バリアとセンターディバイダーは 50 mm、境界は 100 mm で、
+  床から 0.185 m の LiDAR には写らない。L1 で写るのは L2 の台、グラウンドでは L1 の側面・ランプ・階段・ピラーだけ。
+  dev_ws はトランスファーやスポットの手前で深度カメラで y を直している (dev_ws/docs/localization.md)
+- シムでの確認 (2026-11-18): スタートから北・東へ走り 180° 回るまで誤差 0.02 m 以内。L1 の南西の角の外 (-3.3, -3.6) で
+  西を向くと x が 0.11〜0.18 m ずれた。dev_ws 自身の AMCL でも同じ所で 0.11 m で、地形 (見えるのが角だけ) によるもの
+- 実機は odom -> base_link (オドメトリ) がまだ無い。`fake_odom:=true` は止まって重なりを見る用で、動くと追従しない
 
 ## LiDAR (`nr27_sensors`)
 
