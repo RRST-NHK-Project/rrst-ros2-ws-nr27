@@ -1,7 +1,7 @@
 //独ステ４輪制御プログラムを作成するときに使う予定。機体の速度と角速度から逆運動学を用いて、目標の各車輪の速度を計算する関数。
 //一応かつて作成したオドメトリの逆運動学も追加しておく
-//(変数・戻り値の意味は include/br_drive/zakinema.h を参照)
-#include "br_drive/zakinema.h"
+//(変数・戻り値の意味は include/br_swervedrive/zakinema.h を参照)
+#include "br_swervedrive/zakinema.h"
 
 #include <cmath>
 

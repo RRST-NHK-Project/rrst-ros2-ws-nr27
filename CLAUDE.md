@@ -7,11 +7,11 @@ NHKロボコン2027 TR の ROS 2 (Jazzy, Ubuntu 24.04) ワークスペース。
 dev_ws の作戦・L1/L2 の話をそのまま TR に当てはめない (TR はグラウンドとトランスファーまで【3.2.1】)。
 今は**独ステ1ユニットの動作確認**の段階。機能は最小限にとどめる。
 
-**独ステのパッケージは2つあり、機体が違う。** `tr_dokusute` は TR、`br_drive` (Kaho-YAMAMOTO) は BR の独ステ。
-`br_drive` は BR 担当の本人のパッケージなので、名前も中身も変えない。こちらは `nr27_br_hw_ctrl` → `br_dokusute` (2026-11-19)
+**独ステのパッケージは2つあり、機体が違う。** `tr_dokusute` は TR、`br_swervedrive` (Kaho-YAMAMOTO) は BR の独ステ。
+`br_swervedrive` は BR 担当の本人のパッケージなので、本人の指示なしに名前も中身も変えない (本人の指示で `br_drive` → `br_swervedrive` に改名、2026-11-20)。こちらは `nr27_br_hw_ctrl` → `br_dokusute` (2026-11-19)
 → `tr_dokusute` (2026-11-20、機体が TR と分かったため) と改名した。
 
-| | `tr_dokusute` (TR、silby72) | `br_drive` (BR、Kaho-YAMAMOTO) |
+| | `tr_dokusute` (TR、silby72) | `br_swervedrive` (BR、Kaho-YAMAMOTO) |
 |---|---|---|
 | 駆動モータ | マブチ735 + MES基板 (コードの想定。実機で確認していない) | DM3519 (`damiao_ctrl` の `damiao_driver_node` 経由) |
 | 入力 | `cmd_vel` (上位の自動走行につなげる) | PS4 を直接読む1ノード (`infinite_ctrl_node`) |

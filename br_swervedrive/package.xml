@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>br_drive</name>
+  <name>br_swervedrive</name>
   <version>0.0.0</version>
   <description>独立ステアリング1ユニット(操舵DM2325 + 駆動DM3519)をPS4で動かす制御ノード(infinite_ctrl_node)</description>
   <maintainer email="vnfaf69349@yahoo.co.jp">Kaho-YAMAMOTO</maintainer>

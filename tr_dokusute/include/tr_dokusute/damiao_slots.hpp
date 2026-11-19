@@ -90,7 +90,7 @@ inline Feedback GetFeedback(const std::vector<int16_t>& rx, size_t motor) {
 // ---- 操舵の原点のフォトセンサ (NPN、黒線 = 遮光時ON) ----
 // ESP32 (soki_damiao_201) が帰還の kPhotoSensorSlot 番に入れる。値の決まりは
 // ros2can のブランチ feature/damiao-per-motor-maxvel の damiao.cpp
-// (DAMIAO_ORIGIN_SENSOR_SLOT) と、br_drive の origin_sensor_node に合わせてある:
+// (DAMIAO_ORIGIN_SENSOR_SLOT) と、br_swervedrive の infinite_ctrl_node に合わせてある:
 //   0 = センサを読まないファーム、またはまだ値が決まっていない
 //   1 = 入光 (スリットは空)
 //   2 = 遮光 (スリットに物がある = 原点)

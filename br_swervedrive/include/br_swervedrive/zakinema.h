@@ -2,7 +2,7 @@
 // zakinema : 独ステ4輪の運動学(中身は src/zakinema.cpp)
 #include <array>
 
-#include "br_drive/matrix.h"
+#include "br_swervedrive/matrix.h"
 
 struct WheelCmd
 {

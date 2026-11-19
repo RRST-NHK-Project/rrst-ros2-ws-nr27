@@ -20,8 +20,8 @@
 //     ・止まる位置の正確さは角度制御より少し落ちる(50回/秒で速度を指令するため)。
 //
 // ■ 2つの使い方(パラメータ use_drive)
-//   駆動も使う(既定): ros2 run br_drive infinite_ctrl_node
-//   操舵だけ         : ros2 run br_drive infinite_ctrl_node --ros-args -p use_drive:=false
+//   駆動も使う(既定): ros2 run br_swervedrive infinite_ctrl_node
+//   操舵だけ         : ros2 run br_swervedrive infinite_ctrl_node --ros-args -p use_drive:=false
 //     駆動(DM3519)には脱力しか送らない。駆動のESCの電源が切れていても動く。
 //     【2026-11-17】DM3519が回らないまま7.3N・mを出し続けて発煙した(モータの1相が断線)。
 //     【2026-11-19】モータを交換して直ったので、既定を「駆動も使う」に戻した。
@@ -104,7 +104,7 @@
 // ■ 使い方(ros2can と damiao_driver_node を先に起動。PS4ノードは起動しない)
 //   ros2 launch damiao_ctrl damiao_ctrl.launch.py        ← use_joy:=true は付けない
 //   ros2 run joy joy_node
-//   ros2 run br_drive infinite_ctrl_node
+//   ros2 run br_swervedrive infinite_ctrl_node
 //
 // ■ パラメータ
 //   use_drive         : 駆動(DM3519)も使うか(既定 true。false = 操舵だけ)
@@ -129,7 +129,7 @@
 #include "std_msgs/msg/int16_multi_array.hpp"
 
 //自作
-#include "br_drive/zakinema.h"
+#include "br_swervedrive/zakinema.h"
 
 using namespace std::chrono_literals;
 
