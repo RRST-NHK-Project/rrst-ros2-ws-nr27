@@ -20,11 +20,11 @@
 //     ・止まる位置の正確さは角度制御より少し落ちる(50回/秒で速度を指令するため)。
 //
 // ■ 2つの使い方(パラメータ use_drive)
-//   操舵だけ(既定): ros2 run br_drive infinite_ctrl_node
+//   駆動も使う(既定): ros2 run br_drive infinite_ctrl_node
+//   操舵だけ         : ros2 run br_drive infinite_ctrl_node --ros-args -p use_drive:=false
 //     駆動(DM3519)には脱力しか送らない。駆動のESCの電源が切れていても動く。
-//   駆動も使う     : ros2 run br_drive infinite_ctrl_node --ros-args -p use_drive:=true
-//     【2026-11-17】DM3519が回らないまま7.3N・mを出し続けて発煙した。原因(動力線の順番・
-//     エンコーダの校正)が分かるまで use_drive:=true にしないこと。
+//     【2026-11-17】DM3519が回らないまま7.3N・mを出し続けて発煙した(モータの1相が断線)。
+//     【2026-11-19】モータを交換して直ったので、既定を「駆動も使う」に戻した。
 //
 // ■ 操作
 //   R1を押している間だけ動く(離すと2台とも脱力)。起動直後とE-STOPの後は、
@@ -107,7 +107,7 @@
 //   ros2 run br_drive infinite_ctrl_node
 //
 // ■ パラメータ
-//   use_drive         : 駆動(DM3519)も使うか(既定 false)
+//   use_drive         : 駆動(DM3519)も使うか(既定 true。false = 操舵だけ)
 //   origin_offset_deg : 原点センサーがONになる所の車輪の向き[°](前 = 0、右 = +90。既定 0)
 //   drive_coupling    : 操舵と駆動のつながりの打ち消し(上の説明。既定 −1.0(実機で確認済み)。0 = 打ち消さない)
 // =====================================================================
@@ -152,14 +152,30 @@ constexpr double kSteerSign = 1.0;           // 右に倒して車輪が左を�
 constexpr double kDriveSign = 1.0;           // 車輪の前後が逆なら -1.0 にする
 
 // 駆動(モータの出力軸の値。暴走の見張りもこの値で行う)
-constexpr double kDriveMaxRadps = 10.0;      // 駆動モータの最高速度[rad/s](9.1節: 低速から。2026-11-19 5.0→7.5→10.0)
-                                             // → 車輪では 10.0 ÷ 1.43 ≒ 7.0rad/s
-constexpr double kDriveAccelRadps2 = 7.5;    // 駆動モータの加速度の上限[rad/s^2](2026-11-19 5.0→7.5)
+// 走る速さ・加速度は m/s で決める(2026-11-19: 1.5m/s・1.5m/s^2)。中でモータの rad/s に直す。
+constexpr double kWheelRadiusM = 0.040;      // 車輪の半径[m](直径80mm)
+constexpr double kDriveMaxMps = 1.5;         // 最高速度[m/s]
+constexpr double kDriveAccelMps2 = 1.5;      // 加速度の上限[m/s^2]
+// damiao_driver_node のモータ2の速度の上限[rad/s]。ノードの上限はこれを超えないようにする
+// (超えた分はドライバで切られ、R2の奥の方が効かなくなるため)。ドライバの上限を上げたら、ここも変える。
+// 2026-11-19: 20 → 22.5 → 25.0。ドライバは damiao_ctrl.yaml の max_vel_per_motor が [45.6, 20.0] のままなので、
+// ドライバを起動する時に -p "max_vel_per_motor:=[45.6, 25.0]" を付けて上限を合わせること
+// (付けないと20で切られる)。
+constexpr double kDriverLimitRadps = 25.0;
+// 1.5m/s → 車輪 37.5rad/s → モータ 53.8rad/s だが、今はドライバの上限 25.0rad/s(≒0.70m/s)で止まる
+constexpr double kDriveMaxRadps =
+  std::min(kDriveMaxMps / kWheelRadiusM * kDriveGear, kDriverLimitRadps);  // 駆動モータの最高速度[rad/s]
+constexpr double kDriveAccelRadps2 = kDriveAccelMps2 / kWheelRadiusM * kDriveGear;  // ≒53.8rad/s^2
 // 操舵(モータの出力軸の値)
 constexpr double kSteerLimitRad = 11.5;      // 操舵モータの目標の範囲[rad](±12radより少し内側)
                                              // → 車輪の向きでは ±11.5 ÷ 3.77 ≒ ±3.05rad(±175°)
 // 操舵(車輪の向きの値)
-constexpr double kSteerSpeedRadps = 1.95;    // 車輪の向きを変える速さの上限[rad/s](モータでは×3.77。2026-11-19 1.5→1.95(1.3倍))
+// 車輪の向きを変える速さの上限は、damiao_driver_node のモータ1の上限(45.6rad/s)の何割かで決める
+// (2026-11-19: 1.5→1.95(約16%)→30%→50%)。50% = モータ22.8rad/s = 車輪の向き約6.0rad/s(約347°/秒)
+constexpr double kSteerDriverLimitRadps = 45.6;  // damiao_driver_node のモータ1の速度の上限[rad/s]
+constexpr double kSteerSpeedRatio = 0.50;        // その何割で回すか
+constexpr double kSteerSpeedRadps =
+  kSteerDriverLimitRadps * kSteerSpeedRatio / kSteerGear;  // 車輪の向きを変える速さの上限[rad/s]
 constexpr double kAlignTolRad = 0.3;         // 車輪の向きがこれ以上ずれている間は駆動しない[rad]
 constexpr double kReverseHysteresisRad = 0.2;  // 車輪の逆転を切り替えにくくする余裕[rad]
 constexpr double kStickDeadzone = 0.5;       // 左スティックをこれ以上倒したら向きを変える
@@ -364,8 +380,8 @@ public:
   InfiniteCtrlNode()
   : Node("infinite_ctrl_node"), steer_(*this, 1), drive_(*this, 2)
   {
-    // false(既定) = 操舵だけ。駆動を使う時だけ -p use_drive:=true を付ける
-    use_drive_ = declare_parameter<bool>("use_drive", false);
+    // true(既定) = 駆動も使う。操舵だけにする時は -p use_drive:=false を付ける
+    use_drive_ = declare_parameter<bool>("use_drive", true);
     if (use_drive_) {
       RCLCPP_WARN(get_logger(), "駆動(DM3519)も使います。車輪を浮かせ、すぐ止められるようにしてください");
     }
@@ -842,6 +858,12 @@ private:
         RCLCPP_INFO(get_logger(), "準備できました(操舵の始めの向き %+.3frad、%s)。"
           "R1を押している間だけ動きます。最初にR1を押すと原点合わせをします", steer_zero_,
           use_drive_ ? "駆動も使う" : "操舵だけ。駆動には脱力だけを送る");
+        if (use_drive_) {
+          RCLCPP_INFO(get_logger(), "駆動の最高速度 %.2fm/s(モータ%.1frad/s)、加速度 %.2fm/s^2%s",
+            kDriveMaxRadps / kDriveGear * kWheelRadiusM, kDriveMaxRadps, kDriveAccelMps2,
+            kDriveMaxRadps < kDriveMaxMps / kWheelRadiusM * kDriveGear ?
+            "(ドライバの速度の上限で、決めた最高速度より低くなっています)" : "");
+        }
       } else if (now - created_ > 5s) {
         RCLCPP_ERROR(get_logger(), "5秒待ってもモータから返事が来ません"
           "(ros2can・damiao_driver_nodeの起動、モータの電源、ROS_AUTOMATIC_DISCOVERY_RANGEを確認)");
@@ -1070,7 +1092,7 @@ private:
   double drive_coupling_{-1.0}; // パラメータ drive_coupling(操舵と駆動のつながりの打ち消し)
   double coupling_cmd_{0.0};   // 打ち消しの量[駆動モータ rad/s]
   std::chrono::steady_clock::time_point coupling_until_{};  // この時刻まで打ち消しのため駆動を有効にする
-  bool use_drive_{false};      // パラメータ use_drive(false = 操舵だけ)
+  bool use_drive_{true};       // パラメータ use_drive(false = 操舵だけ)
   bool drive_enabled_{false};  // 今、駆動に速度の指令を送っているか(false = 脱力を送っている)
   bool runaway_watch_{false};
   std::chrono::steady_clock::time_point runaway_since_{};
