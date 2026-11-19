@@ -57,8 +57,9 @@
 //   ※白線を使わないので、黒線の断線は「ずっと空」に見える → 見つからずに失敗として止まる。
 //
 // ■ 安全のための決まり(引き継ぎ資料に合わせて全部入れてある)
-//   ・駆動は「R2を押していて、実際に回す時」だけ有効にする。それ以外(操舵だけ動かしている
-//     時、R2を離して止まった後)は脱力にして、駆動に力を出させない。
+//   ・駆動は「R2を押していて、実際に回す時」と「操舵が回っていて、操舵と駆動のつながりを
+//     打ち消す時(drive_coupling が 0 でない時だけ)」だけ有効にする。それ以外(止まっている時、
+//     原点合わせの時)は脱力にして、駆動に力を出させない。
 //   ・【固まりの見張り】駆動が有効な間、トルクが kStallTorqueNm 以上なのに速度が
 //     kStallVelRadps 未満のまま kStallHoldSec 続いたら、2台とも脱力してノードを終える
 //     (回らないまま大きな電流を流し続けて、モータを焼かないため)。
@@ -80,6 +81,19 @@
 //   ・故障・返事の途絶(状態15を含む)で、2台とも脱力して終える。
 //   ・終わる時・Ctrl+Cの時は、必ず脱力を送る。
 //
+// ■ 操舵と駆動のつながりの打ち消し(drive_coupling)
+//   駆動の軸は操舵の回転軸の中を通っている(DM3510 → 上の大きな歯車2枚(同じ部品、1:1)
+//   → 縦の軸 → 傘歯車 → 23:33 → 車輪)。そのため、駆動のモータが止まっていても、操舵で
+//   旋回部が回ると、傘歯車が縦の軸の周りを回って車輪が回ってしまう。
+//   打ち消すには、縦の軸を旋回部と同じ速さで回せばよい。上の歯車が1:1なので、駆動モータに
+//     「車輪の向きが変わる速さ[rad/s] × drive_coupling」
+//   を足して送る(傘歯車や 23:33 の比には関係しない)。
+//   drive_coupling の大きさは 1.0(上の歯車が1:1)、向き(+か−か)は実機で決める:
+//     車輪を浮かせ use_drive:=true drive_coupling:=1.0 で操舵だけ回し、車輪がほぼ止まって
+//     いれば +1.0、0 の時より大きく回るなら −1.0。既定は 0(打ち消さない)。
+//   操舵の速さは操舵モータの帰還の速度から求める。操舵が止まって kCouplingHoldSec たつと
+//   駆動は脱力に戻る。原点合わせの間は打ち消さない(駆動は脱力)。
+//
 // ■ 動かす前に(引き継ぎ資料 0章)
 //   車輪を浮かせ、緊急停止の方法(R1を離す / Ctrl+C / バッテリーのスイッチ)を
 //   確認してから。DM3519はトルクが大きいので固定すること。
@@ -92,6 +106,7 @@
 // ■ パラメータ
 //   use_drive         : 駆動(DM3519)も使うか(既定 false)
 //   origin_offset_deg : 原点センサーがONになる所の車輪の向き[°](前 = 0、右 = +90。既定 0)
+//   drive_coupling    : 操舵と駆動のつながりの打ち消し(上の説明。既定 0 = 打ち消さない。±1.0 を入れる)
 // =====================================================================
 
 #include <algorithm>
@@ -151,6 +166,9 @@ constexpr double kRunawayHoldSec = 0.1;      // 異常がこれだけ続いた�
 constexpr double kStallTorqueNm = 3.0;       // トルクがこれ以上なのに
 constexpr double kStallVelRadps = 0.5;       // 速度がこれ未満のまま
 constexpr double kStallHoldSec = 0.5;        // これだけ続いたら止める
+// 操舵と駆動のつながりの打ち消し(駆動モータの値)
+constexpr double kCouplingMinRadps = 0.05;   // 打ち消しの量がこれ以上の時に駆動を有効にする
+constexpr double kCouplingHoldSec = 0.3;     // 操舵が止まってから、これだけたったら駆動を脱力に戻す
 
 // ---------------------------------------------------------------------
 // 操舵の制御のしかた【ここで切り替える】(説明はファイルの先頭)
@@ -315,6 +333,11 @@ public:
       RCLCPP_WARN(get_logger(), "駆動(DM3519)も使います。車輪を浮かせ、すぐ止められるようにしてください");
     }
     origin_offset_rad_ = declare_parameter<double>("origin_offset_deg", 0.0) * M_PI / 180.0;
+    drive_coupling_ = declare_parameter<double>("drive_coupling", 0.0);
+    if (use_drive_ && drive_coupling_ != 0.0) {
+      RCLCPP_WARN(get_logger(), "操舵と駆動のつながりを打ち消します(drive_coupling=%+.2f)。"
+        "操舵だけ回している時も駆動に力が出ます", drive_coupling_);
+    }
     // 原点センサー(ESP32が serial_rx_201 の23番に入れる)
     origin_sub_ = create_subscription<std_msgs::msg::Int16MultiArray>(
       "serial_rx_" + std::to_string(kOriginDeviceId), 10,
@@ -421,6 +444,8 @@ private:
   void homing_step(std::chrono::steady_clock::time_point now)
   {
     drive_cmd_ = 0.0;
+    drive_out_ = 0.0;
+    coupling_cmd_ = 0.0;
     drive_enabled_ = false;
     drive_.set_disable();
 
@@ -653,12 +678,25 @@ private:
     }
     steer_output(kSteerSpeedRadps * kSteerGear);  // 速さはモータの値にして送る
 
-    // 駆動は「回す指令がある間(R2を離した後、ゆっくり0に戻るまでを含む)」だけ有効にする。
-    // 指令が0になったら脱力にして、止まったまま力を出し続けないようにする。
-    drive_enabled_ = use_drive_ && drive_cmd_ != 0.0;
+    // 操舵と駆動のつながりの打ち消し: 車輪の向きが変わる速さ × drive_coupling を駆動に足す
+    const auto now = std::chrono::steady_clock::now();
+    const double steer_wheel_radps = kSteerSign * steer_.velocity() / kSteerGear;
+    coupling_cmd_ = use_drive_ ? drive_coupling_ * steer_wheel_radps : 0.0;
+    if (std::abs(coupling_cmd_) >= kCouplingMinRadps) {
+      coupling_until_ = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(kCouplingHoldSec));
+    }
+    const bool coupling_active = use_drive_ && drive_coupling_ != 0.0 && now < coupling_until_;
+
+    // 駆動は「回す指令がある間(R2を離した後、ゆっくり0に戻るまでを含む)」と
+    // 「操舵が回っていて打ち消す間」だけ有効にする。どちらでもなければ脱力にして、
+    // 止まったまま力を出し続けないようにする。
+    drive_enabled_ = use_drive_ && (drive_cmd_ != 0.0 || coupling_active);
     if (drive_enabled_) {
-      drive_.set_velocity(drive_cmd_);
+      drive_out_ = drive_cmd_ + (coupling_active ? coupling_cmd_ : 0.0);
+      drive_.set_velocity(drive_out_);
     } else {
+      drive_out_ = 0.0;
       drive_.set_disable();
     }
   }
@@ -685,7 +723,7 @@ private:
   {
     const double v = drive_.velocity();
     const bool opposite = drive_enabled_ &&
-      std::abs(v - drive_cmd_) >= kRunawayDiffRadps && v * drive_cmd_ <= 0.0;
+      std::abs(v - drive_out_) >= kRunawayDiffRadps && v * drive_out_ <= 0.0;
     const bool too_fast = std::abs(v) > kDriveMaxRadps + kRunawayOverRadps;
     return held_for(opposite || too_fast, runaway_watch_, runaway_since_, now, kRunawayHoldSec);
   }
@@ -800,6 +838,9 @@ private:
       steer_.set_disable();
       drive_.set_disable();
       drive_cmd_ = 0.0;
+      drive_out_ = 0.0;
+      coupling_cmd_ = 0.0;
+      coupling_until_ = {};
       drive_enabled_ = false;
       stall_watch_ = false;
       was_active_ = false;
@@ -853,7 +894,12 @@ private:
       if (stall_detected(now)) {
         RCLCPP_ERROR(get_logger(), "駆動(DM3519)が大きな力を出したまま回っていないので止めます"
           "(指令%+.2frad/s 実速度%+.2frad/s トルク%+.2fN・m)。モータが熱くなっていないか、"
-          "動力線・エンコーダの校正を確かめてください", drive_cmd_, drive_.velocity(), drive_.torque());
+          "動力線・エンコーダの校正を確かめてください", drive_out_, drive_.velocity(), drive_.torque());
+        RCLCPP_ERROR(get_logger(), "  止まった時の駆動の位置: モータ%+.3frad(帰還の値 %+.3frad)"
+          "  回し始めてから %+.3frad(車輪 %+.1f°)",
+          drive_.position_unwrapped(), drive_.position(),
+          drive_.position_unwrapped() - drive_start_pos_,
+          (drive_.position_unwrapped() - drive_start_pos_) / kDriveGear * 180.0 / M_PI);
         finish();
         return;
       }
@@ -862,20 +908,43 @@ private:
     if (drive_.ready() && runaway_detected(now)) {
       RCLCPP_ERROR(get_logger(), "駆動(DM3519)の暴走を検出したので止めます"
         "(指令%+.2frad/s 実速度%+.2frad/s トルク%+.2fN・m)",
-        drive_cmd_, drive_.velocity(), drive_.torque());
+        drive_out_, drive_.velocity(), drive_.torque());
       finish();
       return;
     }
     steer_.send(); drive_.send();
 
+    // 駆動を回している間は、0.1秒ごとに駆動の様子を出す(固まりは0.6秒ほどで止まるため)
+    if (drive_enabled_ && !drive_was_enabled_) {
+      drive_start_pos_ = drive_.position_unwrapped();
+      last_drive_print_ = now - 1s;
+      RCLCPP_INFO(get_logger(), "[駆動] 回し始め: 位置 モータ%+.3frad(帰還の値 %+.3frad)",
+        drive_.position_unwrapped(), drive_.position());
+    }
+    drive_was_enabled_ = drive_enabled_;
+    if (drive_enabled_ && now - last_drive_print_ >= 100ms) {
+      last_drive_print_ = now;
+      const double moved = drive_.position_unwrapped() - drive_start_pos_;
+      RCLCPP_INFO(get_logger(), "[駆動] 指令%+5.2f(うち打ち消し%+5.2f) 実%+6.2frad/s  トルク%+5.2fN・m  "
+        "位置 モータ%+8.3frad(帰還の値 %+.3f)  回し始めから%+.3frad(車輪%+6.1f°)  状態%d",
+        drive_out_, drive_out_ - drive_cmd_, drive_.velocity(), drive_.torque(),
+        drive_.position_unwrapped(), drive_.position(),
+        moved, moved / kDriveGear * 180.0 / M_PI, drive_.state());
+    }
+
     // 1秒ごとに様子を表示
     if (now - last_print_ >= 1s) {
       last_print_ = now;
       // 速度制御の時は、操舵へ送っている速度と内部の位置も出す
-      char extra[96] = "";
+      char extra[192] = "";
+      int n = 0;
       if (kSteerVel) {
-        std::snprintf(extra, sizeof(extra), "  操舵の速度指令%+5.2frad/s 内部の位置%+.1frad",
+        n = std::snprintf(extra, sizeof(extra), "  操舵の速度指令%+5.2frad/s 内部の位置%+.1frad",
           steer_vel_cmd_, steer_.internal_pos());
+      }
+      if (n >= 0 && static_cast<size_t>(n) < sizeof(extra)) {
+        std::snprintf(extra + n, sizeof(extra) - n, "  駆動の位置 モータ%+.3frad(帰還の値 %+.3f)",
+          drive_.position_unwrapped(), drive_.position());
       }
       // 車輪の値で表示する(かっこ内はモータの値)
       RCLCPP_INFO(
@@ -953,7 +1022,11 @@ private:
   double steer_zero_{0.0};     // 起動時の操舵の向き(スティック上 = この向き)
   double steer_target_{0.0};   // 今の操舵の目標[rad]
   bool steer_reverse_{false};  // 車輪を逆転させているか
-  double drive_cmd_{0.0};      // 今送っている駆動の速度[rad/s](加速度制限後)
+  double drive_cmd_{0.0};      // R2による駆動の速度[rad/s](加速度制限後。打ち消しは含まない)
+  double drive_out_{0.0};      // 実際に駆動へ送っている速度[rad/s](drive_cmd_ + 打ち消し)
+  double drive_coupling_{0.0}; // パラメータ drive_coupling(操舵と駆動のつながりの打ち消し)
+  double coupling_cmd_{0.0};   // 打ち消しの量[駆動モータ rad/s]
+  std::chrono::steady_clock::time_point coupling_until_{};  // この時刻まで打ち消しのため駆動を有効にする
   bool use_drive_{false};      // パラメータ use_drive(false = 操舵だけ)
   bool drive_enabled_{false};  // 今、駆動に速度の指令を送っているか(false = 脱力を送っている)
   bool runaway_watch_{false};
@@ -962,6 +1035,9 @@ private:
   std::chrono::steady_clock::time_point stall_since_{};
   std::chrono::steady_clock::time_point created_;
   std::chrono::steady_clock::time_point last_print_{};
+  std::chrono::steady_clock::time_point last_drive_print_{};
+  bool drive_was_enabled_{false};   // 前の周期に駆動を回していたか
+  double drive_start_pos_{0.0};     // 駆動を回し始めた時の位置[モータrad]
 };
 
 }  // namespace Infinite_Zakisute
