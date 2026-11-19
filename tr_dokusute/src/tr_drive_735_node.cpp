@@ -4,7 +4,7 @@
 //   sub  drive/duty  (Float32)  MDへのduty (符号=向き)
 //   pub  drive/speed (Float32)  エンコーダから求めた車輪速度 [m/s]
 //
-// 速度制御は br_pid ノードの役割。ここは duty を送り、速度を測るだけ。
+// 速度制御は tr_pid ノードの役割。ここは duty を送り、速度を測るだけ。
 //
 // 安全:
 //   - duty が届かなければ 0 を送る
@@ -16,21 +16,21 @@
 #include <memory>
 #include <string>
 
-#include "br_dokusute/latest_value.hpp"
-#include "br_dokusute/stop_on_shutdown.hpp"
+#include "tr_dokusute/latest_value.hpp"
+#include "tr_dokusute/stop_on_shutdown.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 
 constexpr size_t kTxSlotCount = 24;
 constexpr double kSpeedFilterGain = 0.3;  // 速度ローパスの新しい値の重み
 
 class Drive735Node : public rclcpp::Node {
  public:
-  Drive735Node() : Node("br_drive_735") {
+  Drive735Node() : Node("tr_drive_735") {
     const std::string id =
         std::to_string(declare_parameter<int>("device_id", 1));
     tx_slot_ = declare_parameter<int>("tx_slot", 0);
@@ -112,11 +112,11 @@ class Drive735Node : public rclcpp::Node {
   std::unique_ptr<StopOnShutdown> stop_;
 };
 
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<br_dokusute::Drive735Node>());
+  rclcpp::spin(std::make_shared<tr_dokusute::Drive735Node>());
   rclcpp::shutdown();
   return 0;
 }

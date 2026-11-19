@@ -3,7 +3,7 @@
 <package format="3">
   <name>nr27_localization</name>
   <version>0.0.0</version>
-  <description>NR27 BR self-localization: AMCL on the known field maps imported from the dev_ws simulator world.</description>
+  <description>NR27 TR self-localization: AMCL on the known field maps imported from the dev_ws simulator world.</description>
   <maintainer email="riko26maeda@gmail.com">dev</maintainer>
   <license>Apache-2.0</license>
 

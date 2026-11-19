@@ -2,9 +2,9 @@
 
 #include <cmath>
 
-#include "br_dokusute/swerve_kinematics.hpp"
+#include "tr_dokusute/swerve_kinematics.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 namespace {
 
 constexpr double kEps = 1e-9;
@@ -61,4 +61,4 @@ TEST(ChooseSteerAngleTest, StaysWithinLimit) {
 }
 
 }  // namespace
-}  // namespace br_dokusute
+}  // namespace tr_dokusute

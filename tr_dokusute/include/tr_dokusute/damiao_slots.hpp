@@ -21,8 +21,8 @@
 //
 // 帰還の23番は、操舵の原点のフォトセンサ (下の GetPhotoSensor)。
 
-#ifndef BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
-#define BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
+#ifndef TR_DOKUSUTE__DAMIAO_SLOTS_HPP_
+#define TR_DOKUSUTE__DAMIAO_SLOTS_HPP_
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +30,7 @@
 #include <optional>
 #include <vector>
 
-namespace br_dokusute {
+namespace tr_dokusute {
 namespace damiao {
 
 constexpr size_t kSlotCount = 24;
@@ -117,6 +117,6 @@ inline std::optional<bool> IsPhotoSensorBlocked(
 }
 
 }  // namespace damiao
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
 
-#endif  // BR_DOKUSUTE__DAMIAO_SLOTS_HPP_
+#endif  // TR_DOKUSUTE__DAMIAO_SLOTS_HPP_

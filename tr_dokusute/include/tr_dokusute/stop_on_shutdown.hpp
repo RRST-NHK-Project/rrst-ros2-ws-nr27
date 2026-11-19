@@ -7,8 +7,8 @@
 // 使い方: メンバに持ち、通常の送信の先頭で is_stopping() を見て、
 // true なら何も送らない (停止指令を上書きしないため)。
 
-#ifndef BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
-#define BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
+#ifndef TR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
+#define TR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
 
 #include <atomic>
 #include <chrono>
@@ -17,7 +17,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 
 class StopOnShutdown {
  public:
@@ -57,6 +57,6 @@ class StopOnShutdown {
   std::atomic<bool> stopping_{false};
 };
 
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
 
-#endif  // BR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_
+#endif  // TR_DOKUSUTE__STOP_ON_SHUTDOWN_HPP_

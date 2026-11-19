@@ -13,15 +13,15 @@
 #include <memory>
 
 #include "common/PID.hpp"
-#include "br_dokusute/latest_value.hpp"
+#include "tr_dokusute/latest_value.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 
 class PidNode : public rclcpp::Node {
  public:
-  PidNode() : Node("br_pid") {
+  PidNode() : Node("tr_pid") {
     const float kp = declare_parameter<double>("kp", 0.0);
     const float ki = declare_parameter<double>("ki", 0.0);
     const float kd = declare_parameter<double>("kd", 0.0);
@@ -79,11 +79,11 @@ class PidNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<br_dokusute::PidNode>());
+  rclcpp::spin(std::make_shared<tr_dokusute::PidNode>());
   rclcpp::shutdown();
   return 0;
 }

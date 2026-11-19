@@ -10,23 +10,23 @@
 // publish しない (入光と取り違えると原点を見落とすため)。
 //
 // 起動 (ros2can を先に起動):
-//   ros2 run br_dokusute br_photo_sensor
+//   ros2 run tr_dokusute tr_photo_sensor
 //   ros2 topic echo /photo_sensor/blocked
 
 #include <memory>
 #include <optional>
 #include <string>
 
-#include "br_dokusute/damiao_slots.hpp"
+#include "tr_dokusute/damiao_slots.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/int16_multi_array.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 
 class PhotoSensorNode : public rclcpp::Node {
  public:
-  PhotoSensorNode() : Node("br_photo_sensor") {
+  PhotoSensorNode() : Node("tr_photo_sensor") {
     const std::string topic =
         "serial_rx_" + std::to_string(declare_parameter<int>("device_id", 201));
     blocked_pub_ =
@@ -75,11 +75,11 @@ class PhotoSensorNode : public rclcpp::Node {
   rclcpp::Subscription<std_msgs::msg::Int16MultiArray>::SharedPtr rx_sub_;
 };
 
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<br_dokusute::PhotoSensorNode>());
+  rclcpp::spin(std::make_shared<tr_dokusute::PhotoSensorNode>());
   rclcpp::shutdown();
   return 0;
 }

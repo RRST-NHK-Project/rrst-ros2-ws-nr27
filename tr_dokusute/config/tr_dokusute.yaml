@@ -1,13 +1,13 @@
-# NR27 BR 独ステ1ユニットの試験用設定 (ノード名がキー)
+# NR27 TR 独ステ1ユニットの試験用設定 (ノード名がキー)
 # 【仮置き】と書いた値は実機で必ず合わせること。
 
-br_swerve_kinematics:
+tr_swerve_kinematics:
   ros__parameters:
     module_x: 0.25       # 【仮置き】ロボット中心からの位置 [m] (前が+)
     module_y: 0.25       # 【仮置き】(左が+)
     steer_limit: 3.14159  # ステアの可動範囲 ±[rad] (配線ねじれ防止。pi/2以上)
 
-br_steer_dm2325:
+tr_steer_dm2325:
   ros__parameters:
     device_id: 201       # ros2can MODE_DAMIAO の DEVICE_ID (CAN線はDamiao専用)
     motor_index: 1       # config.hpp の DAMIAO_MOTORS の行 (0始まり)。
@@ -19,7 +19,7 @@ br_steer_dm2325:
     #                      で今の向きを登録できる (値はログに出る。保存はされない)
     vel_limit: 5.0       # 移動速度の上限 [rad/s, 出力軸] 初回は控えめ (ファーム上限45.6)
 
-br_drive_735:
+tr_drive_735:
   ros__parameters:
     device_id: 1         # 【仮置き】ros2can CAN_HOST の DEVICE_ID
     tx_slot: 0           # MES基板 MD1 (ノード番号*5+0)
@@ -31,7 +31,7 @@ br_drive_735:
     duty_max: 255.0      # MD_PWM_MAX (8bit)
 
 # 駆動の速度制御 (setpoint=drive/speed_target, measurement=drive/speed, output=drive/duty)
-br_pid:
+tr_pid:
   ros__parameters:
     kff: 127.5           # 【仮置き】目標速度1 m/s あたりのduty (= 255 / 最高速度2.0m/s)
     kp: 0.0              # 初めは0 (フィードフォワードだけ)。エンコーダが合ってから上げる

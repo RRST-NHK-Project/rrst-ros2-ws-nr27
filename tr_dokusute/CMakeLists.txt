@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(br_dokusute)
+project(tr_dokusute)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -19,43 +19,43 @@ add_library(swerve_kinematics STATIC src/swerve_kinematics.cpp)
 target_include_directories(swerve_kinematics PUBLIC include)
 
 # 入力
-add_executable(br_joy_teleop src/br_joy_teleop_node.cpp)
-ament_target_dependencies(br_joy_teleop rclcpp sensor_msgs geometry_msgs)
+add_executable(tr_joy_teleop src/tr_joy_teleop_node.cpp)
+ament_target_dependencies(tr_joy_teleop rclcpp sensor_msgs geometry_msgs)
 
 # 計算
-add_executable(br_swerve_kinematics src/br_swerve_kinematics_node.cpp)
-target_link_libraries(br_swerve_kinematics swerve_kinematics)
-ament_target_dependencies(br_swerve_kinematics rclcpp geometry_msgs std_msgs)
+add_executable(tr_swerve_kinematics src/tr_swerve_kinematics_node.cpp)
+target_link_libraries(tr_swerve_kinematics swerve_kinematics)
+ament_target_dependencies(tr_swerve_kinematics rclcpp geometry_msgs std_msgs)
 
-add_executable(br_pid src/br_pid_node.cpp)
-target_include_directories(br_pid PRIVATE include)
-ament_target_dependencies(br_pid rclcpp std_msgs common)
+add_executable(tr_pid src/tr_pid_node.cpp)
+target_include_directories(tr_pid PRIVATE include)
+ament_target_dependencies(tr_pid rclcpp std_msgs common)
 
 add_executable(dob_node src/dob_node.cpp)
 ament_target_dependencies(dob_node rclcpp geometry_msgs nav_msgs)
 
 # 機構 (ros2can 経由でモーターを動かす)
-add_executable(br_steer_dm2325 src/br_steer_dm2325_node.cpp)
-target_include_directories(br_steer_dm2325 PRIVATE include)
-ament_target_dependencies(br_steer_dm2325 rclcpp std_msgs std_srvs)
+add_executable(tr_steer_dm2325 src/tr_steer_dm2325_node.cpp)
+target_include_directories(tr_steer_dm2325 PRIVATE include)
+ament_target_dependencies(tr_steer_dm2325 rclcpp std_msgs std_srvs)
 
-add_executable(br_drive_735 src/br_drive_735_node.cpp)
-target_include_directories(br_drive_735 PRIVATE include)
-ament_target_dependencies(br_drive_735 rclcpp std_msgs)
+add_executable(tr_drive_735 src/tr_drive_735_node.cpp)
+target_include_directories(tr_drive_735 PRIVATE include)
+ament_target_dependencies(tr_drive_735 rclcpp std_msgs)
 
 # センサ (確認用)
-add_executable(br_photo_sensor src/br_photo_sensor_node.cpp)
-target_include_directories(br_photo_sensor PRIVATE include)
-ament_target_dependencies(br_photo_sensor rclcpp std_msgs)
+add_executable(tr_photo_sensor src/tr_photo_sensor_node.cpp)
+target_include_directories(tr_photo_sensor PRIVATE include)
+ament_target_dependencies(tr_photo_sensor rclcpp std_msgs)
 
 install(TARGETS
-  br_joy_teleop
-  br_swerve_kinematics
-  br_pid
+  tr_joy_teleop
+  tr_swerve_kinematics
+  tr_pid
   dob_node
-  br_steer_dm2325
-  br_drive_735
-  br_photo_sensor
+  tr_steer_dm2325
+  tr_drive_735
+  tr_photo_sensor
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})

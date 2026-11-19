@@ -1,5 +1,5 @@
 /*
-NR27 BR 独ステ PS4テレオペ (動作確認用の最小構成)
+NR27 TR 独ステ PS4テレオペ (動作確認用の最小構成)
 
 R1を押している間だけ動く。
   左スティック     : 平行移動 (倒した分だけ速くなる)
@@ -31,18 +31,18 @@ timeout (0.5秒) で止める。
 
 class JoyTeleop : public rclcpp::Node {
  public:
-  JoyTeleop() : Node("br_joy_teleop") {
+  JoyTeleop() : Node("tr_joy_teleop") {
     // joyノードのSubscribe
     joy_sub_ = this->create_subscription<sensor_msgs::msg::Joy>(
         "joy", 10,
         std::bind(&JoyTeleop::ps4_listener_callback, this,
                   std::placeholders::_1));
 
-    // br_swerve_kinematicsへpublish
+    // tr_swerve_kinematicsへpublish
     cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 
     RCLCPP_INFO(get_logger(),
-                "br_joy_teleop started. R1を押している間だけ動きます");
+                "tr_joy_teleop started. R1を押している間だけ動きます");
   }
 
  private:
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
 
   // figletでノード名を表示
-  std::string figletout = "figlet BR Joy Teleop";
+  std::string figletout = "figlet TR Joy Teleop";
   int result = std::system(figletout.c_str());
   if (result != 0) {
     std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"

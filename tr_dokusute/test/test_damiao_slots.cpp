@@ -4,9 +4,9 @@
 
 #include <vector>
 
-#include "br_dokusute/damiao_slots.hpp"
+#include "tr_dokusute/damiao_slots.hpp"
 
-namespace br_dokusute {
+namespace tr_dokusute {
 namespace damiao {
 namespace {
 
@@ -75,4 +75,4 @@ TEST(DamiaoSlotsTest, PhotoSensorFollowsFirmwareValues) {
 
 }  // namespace
 }  // namespace damiao
-}  // namespace br_dokusute
+}  // namespace tr_dokusute
