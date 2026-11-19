@@ -82,7 +82,7 @@
 //   ・終わる時・Ctrl+Cの時は、必ず脱力を送る。
 //
 // ■ 操舵と駆動のつながりの打ち消し(drive_coupling)
-//   駆動の軸は操舵の回転軸の中を通っている(DM3510 → 上の大きな歯車2枚(同じ部品、1:1)
+//   駆動の軸は操舵の回転軸の中を通っている(DM-S3519 → 上の大きな歯車2枚(同じ部品、1:1)
 //   → 縦の軸 → 傘歯車 → 23:33 → 車輪)。そのため、駆動のモータが止まっていても、操舵で
 //   旋回部が回ると、傘歯車が縦の軸の周りを回って車輪が回ってしまう。
 //   打ち消すには、縦の軸を旋回部と同じ速さで回せばよい。上の歯車が1:1なので、駆動モータに
@@ -141,6 +141,10 @@ constexpr double kPeriodSec = 0.02;          // 指令を送る周期(50回/秒)
 // 歯車の比(モータ側の歯数 : 車輪側の歯数)。モータの値 = 車輪の値 × 比
 constexpr double kSteerGear = 49.0 / 13.0;   // 操舵 13:49。モータが約3.77回転で車輪の向きが1回転
 constexpr double kDriveGear = 33.0 / 23.0;   // 駆動 23:33。モータが約1.43回転で車輪が1回転
+// 駆動モータ DM-S3519-1EC は中に減速機(3591/187 ≒ 19.2)がある。速度は出口の値で返ってくるが、
+// 位置は中の回転子の値で返ってくる(2026-11-19 実機: 車輪1回転で位置が約178rad変わった)。
+// ログに出す駆動の位置は、これで割って出口の値に直す(制御には位置を使っていない)。
+constexpr double kDriveEncRatio = 3591.0 / 187.0;
 constexpr double kSteerSign = 1.0;           // 右に倒して車輪が左を向くなら -1.0 にする
 constexpr double kDriveSign = 1.0;           // 車輪の前後が逆なら -1.0 にする
 
@@ -702,6 +706,9 @@ private:
   }
   // ===================================================================
 
+  // 駆動の位置[モータの出口 rad](ログ用。帰還の位置は回転子の値なので減速比で割る)
+  double drive_pos_out() const {return drive_.position_unwrapped() / kDriveEncRatio;}
+
   // 「異常」が hold_sec 続いたら true を返す見張りの共通部分
   static bool held_for(
     bool abnormal, bool & watching, std::chrono::steady_clock::time_point & since,
@@ -895,11 +902,10 @@ private:
         RCLCPP_ERROR(get_logger(), "駆動(DM3519)が大きな力を出したまま回っていないので止めます"
           "(指令%+.2frad/s 実速度%+.2frad/s トルク%+.2fN・m)。モータが熱くなっていないか、"
           "動力線・エンコーダの校正を確かめてください", drive_out_, drive_.velocity(), drive_.torque());
-        RCLCPP_ERROR(get_logger(), "  止まった時の駆動の位置: モータ%+.3frad(帰還の値 %+.3frad)"
+        RCLCPP_ERROR(get_logger(), "  止まった時の駆動の位置: モータ%+.3frad(帰還の値 %+.3frad 回転子)"
           "  回し始めてから %+.3frad(車輪 %+.1f°)",
-          drive_.position_unwrapped(), drive_.position(),
-          drive_.position_unwrapped() - drive_start_pos_,
-          (drive_.position_unwrapped() - drive_start_pos_) / kDriveGear * 180.0 / M_PI);
+          drive_pos_out(), drive_.position(), drive_pos_out() - drive_start_pos_,
+          (drive_pos_out() - drive_start_pos_) / kDriveGear * 180.0 / M_PI);
         finish();
         return;
       }
@@ -916,19 +922,19 @@ private:
 
     // 駆動を回している間は、0.1秒ごとに駆動の様子を出す(固まりは0.6秒ほどで止まるため)
     if (drive_enabled_ && !drive_was_enabled_) {
-      drive_start_pos_ = drive_.position_unwrapped();
+      drive_start_pos_ = drive_pos_out();
       last_drive_print_ = now - 1s;
-      RCLCPP_INFO(get_logger(), "[駆動] 回し始め: 位置 モータ%+.3frad(帰還の値 %+.3frad)",
-        drive_.position_unwrapped(), drive_.position());
+      RCLCPP_INFO(get_logger(), "[駆動] 回し始め: 位置 モータ%+.3frad(帰還の値 %+.3frad 回転子)",
+        drive_pos_out(), drive_.position());
     }
     drive_was_enabled_ = drive_enabled_;
     if (drive_enabled_ && now - last_drive_print_ >= 100ms) {
       last_drive_print_ = now;
-      const double moved = drive_.position_unwrapped() - drive_start_pos_;
+      const double moved = drive_pos_out() - drive_start_pos_;
       RCLCPP_INFO(get_logger(), "[駆動] 指令%+5.2f(うち打ち消し%+5.2f) 実%+6.2frad/s  トルク%+5.2fN・m  "
-        "位置 モータ%+8.3frad(帰還の値 %+.3f)  回し始めから%+.3frad(車輪%+6.1f°)  状態%d",
+        "位置 モータ%+8.3frad(帰還の値 %+.3f 回転子)  回し始めから%+.3frad(車輪%+6.1f°)  状態%d",
         drive_out_, drive_out_ - drive_cmd_, drive_.velocity(), drive_.torque(),
-        drive_.position_unwrapped(), drive_.position(),
+        drive_pos_out(), drive_.position(),
         moved, moved / kDriveGear * 180.0 / M_PI, drive_.state());
     }
 
@@ -943,8 +949,8 @@ private:
           steer_vel_cmd_, steer_.internal_pos());
       }
       if (n >= 0 && static_cast<size_t>(n) < sizeof(extra)) {
-        std::snprintf(extra + n, sizeof(extra) - n, "  駆動の位置 モータ%+.3frad(帰還の値 %+.3f)",
-          drive_.position_unwrapped(), drive_.position());
+        std::snprintf(extra + n, sizeof(extra) - n, "  駆動の位置 モータ%+.3frad(帰還の値 %+.3f 回転子)",
+          drive_pos_out(), drive_.position());
       }
       // 車輪の値で表示する(かっこ内はモータの値)
       RCLCPP_INFO(
@@ -1037,7 +1043,7 @@ private:
   std::chrono::steady_clock::time_point last_print_{};
   std::chrono::steady_clock::time_point last_drive_print_{};
   bool drive_was_enabled_{false};   // 前の周期に駆動を回していたか
-  double drive_start_pos_{0.0};     // 駆動を回し始めた時の位置[モータrad]
+  double drive_start_pos_{0.0};     // 駆動を回し始めた時の位置[モータの出口 rad]
 };
 
 }  // namespace Infinite_Zakisute
