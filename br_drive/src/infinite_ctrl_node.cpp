@@ -149,14 +149,14 @@ constexpr double kSteerSign = 1.0;           // 右に倒して車輪が左を�
 constexpr double kDriveSign = 1.0;           // 車輪の前後が逆なら -1.0 にする
 
 // 駆動(モータの出力軸の値。暴走の見張りもこの値で行う)
-constexpr double kDriveMaxRadps = 5.0;       // 駆動モータの最高速度[rad/s](9.1節: 低速から)
-                                             // → 車輪では 5.0 ÷ 1.43 ≒ 3.5rad/s
-constexpr double kDriveAccelRadps2 = 5.0;    // 駆動モータの加速度の上限[rad/s^2]
+constexpr double kDriveMaxRadps = 10.0;      // 駆動モータの最高速度[rad/s](9.1節: 低速から。2026-11-19 5.0→7.5→10.0)
+                                             // → 車輪では 10.0 ÷ 1.43 ≒ 7.0rad/s
+constexpr double kDriveAccelRadps2 = 7.5;    // 駆動モータの加速度の上限[rad/s^2](2026-11-19 5.0→7.5)
 // 操舵(モータの出力軸の値)
 constexpr double kSteerLimitRad = 11.5;      // 操舵モータの目標の範囲[rad](±12radより少し内側)
                                              // → 車輪の向きでは ±11.5 ÷ 3.77 ≒ ±3.05rad(±175°)
 // 操舵(車輪の向きの値)
-constexpr double kSteerSpeedRadps = 1.5;     // 車輪の向きを変える速さの上限[rad/s](モータでは×3.77)
+constexpr double kSteerSpeedRadps = 1.95;    // 車輪の向きを変える速さの上限[rad/s](モータでは×3.77。2026-11-19 1.5→1.95(1.3倍))
 constexpr double kAlignTolRad = 0.3;         // 車輪の向きがこれ以上ずれている間は駆動しない[rad]
 constexpr double kReverseHysteresisRad = 0.2;  // 車輪の逆転を切り替えにくくする余裕[rad]
 constexpr double kStickDeadzone = 0.5;       // 左スティックをこれ以上倒したら向きを変える
