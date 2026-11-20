@@ -66,7 +66,8 @@ joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2
 
 BR の独ステ1ユニットを PS4 で動かす**1ノードだけ**のパッケージ (`infinite_ctrl_node`)。
 `tr_dokusute` と違い、入力・計算・機構を1ノードにまとめている (試験用。本人のパッケージなので分けない)。
-仕様の正本は `br_swervedrive/src/infinite_ctrl_node.cpp` の先頭のコメント。ここは要点だけ。
+仕様の正本は `br_swervedrive/src/infinite_ctrl_node.cpp` の先頭のコメント。定数 (歯車の比・速さ・見張りのしきい値など) は
+`br_swervedrive/include/br_swervedrive/infinite_ctrl_params.hpp` にまとめてある (変えたらビルドし直す)。ここは要点だけ。
 
 | 項目 | 内容 |
 |---|---|
@@ -112,7 +113,7 @@ joy ─→ infinite_ctrl_node ─ damiao/motor1/cmd (操舵) ─→ damiao_drive
      (2026-11-19 に 20 から 40 へ。taiyouss のコミット 7cf6d51)
   3. ノードの `kDriverLimitRadps`: 25.0
   
-  ノードの中のコメントは「yaml が 20 のまま」となっていて古い。25 → 30 → 35 → 40 と段階的に上げる予定
+  25 → 30 → 35 → 40 と段階的に上げる予定
 
 ## コマンド
 

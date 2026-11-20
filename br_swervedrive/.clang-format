@@ -1,0 +1,11 @@
+# br_swervedrive はチームのテンプレート(~/rrst-ros2-ws/teleop_tools/src/Ros2Can_Host.cpp)の書き方に合わせる
+# (ワークスペース直下の .clang-format(Google)は tr_dokusute 用)。
+# インデント4、{ は同じ行、public:/private: は行頭。
+BasedOnStyle: LLVM
+IndentWidth: 4
+AccessModifierOffset: -4
+ColumnLimit: 0
+# 日本語のコメントは空白で区切られないので、自動で折り返すと文の途中で切れる。
+ReflowComments: false
+SortIncludes: Never
+AllowShortFunctionsOnASingleLine: Inline
