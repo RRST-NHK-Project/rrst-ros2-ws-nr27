@@ -66,6 +66,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_swerve_kinematics swerve_kinematics)
   ament_add_gtest(test_damiao_slots test/test_damiao_slots.cpp)
   target_include_directories(test_damiao_slots PRIVATE include)
+  ament_add_gtest(test_steer_homing test/test_steer_homing.cpp)
+  target_include_directories(test_steer_homing PRIVATE include)
 
   # copyright: 著作権表記の方針がまだ決まっていないので使わない
   # uncrustify: ROS 2 スタイルを強制し、Google C++ Style と衝突するので使わない

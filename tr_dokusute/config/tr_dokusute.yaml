@@ -9,15 +9,26 @@ tr_swerve_kinematics:
 
 tr_steer_dm2325:
   ros__parameters:
-    device_id: 201       # ros2can MODE_DAMIAO の DEVICE_ID (CAN線はDamiao専用)
-    motor_index: 1       # config.hpp の DAMIAO_MOTORS の行 (0始まり)。
-    #                      今つないでいるESCは2行目 (ESC_ID 0x02 / MST_ID 0x012) として応答する
+    device_id: 205       # ros2can MODE_DAMIAO の DEVICE_ID (CAN線はDamiao専用)
+    #                      TR の操舵の ESP32 (ros2can generated_firmware/tr_damiao_205)。BR は 201
+    motor_index: 0       # config.hpp の DAMIAO_MOTORS の行 (0始まり)。tr_damiao_205 は1行目が操舵
     gear_ratio: 1.0      # 【仮置き】出力軸→ステア軸の減速比。直結なら1.0
     sign: 1              # 【仮置き】DMの+回転でステアが反時計回りなら1、逆なら-1
     offset_rad: 0.0      # 車輪が前を向くときのDM位置 [rad, 出力軸]
     #                      ros2 service call /steer/set_zero std_srvs/srv/Trigger
     #                      で今の向きを登録できる (値はログに出る。保存はされない)
     vel_limit: 5.0       # 移動速度の上限 [rad/s, 出力軸] 初回は控えめ (ファーム上限45.6)
+    # 原点合わせ (起動直後に自動。やり直し: ros2 service call /steer/home std_srvs/srv/Trigger)
+    # 操舵を回してフォトセンサのフラグを往復で探し、フラグの中心を原点にする
+    home_on_start: true  # false なら原点合わせをせず offset_rad を使う
+    flag_arc_mm: 64.01   # フラグ (センサを遮る円弧) の長さ [mm]
+    flag_diameter_mm: 163.0  # フラグが付いている円の直径 [mm] → 幅 45°
+    flag_center_rad: 0.0  # 【仮置き】フラグの中心にいる時のステア角 [rad] (前 = 0、反時計回り +)
+    homing_vel: 1.0      # 原点合わせの速さ [rad/s, 出力軸] (約57°/s)
+    homing_direction: 1  # 最初に回す向き (+1 / -1)
+    homing_sweep_turns: 1.3  # フラグを探して回す最大量 [周, ステア軸]
+    homing_width_tolerance: 0.3  # 測ったフラグ幅の許容誤差 (割合)
+    homing_timeout: 30.0  # [s]
 
 tr_drive_735:
   ros__parameters:

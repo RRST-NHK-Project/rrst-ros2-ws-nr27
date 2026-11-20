@@ -28,7 +28,7 @@ class PhotoSensorNode : public rclcpp::Node {
  public:
   PhotoSensorNode() : Node("tr_photo_sensor") {
     const std::string topic =
-        "serial_rx_" + std::to_string(declare_parameter<int>("device_id", 201));
+        "serial_rx_" + std::to_string(declare_parameter<int>("device_id", 205));
     blocked_pub_ =
         create_publisher<std_msgs::msg::Bool>("photo_sensor/blocked", 10);
     rx_sub_ = create_subscription<std_msgs::msg::Int16MultiArray>(

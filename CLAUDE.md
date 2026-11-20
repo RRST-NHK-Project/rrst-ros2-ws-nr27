@@ -19,9 +19,9 @@ dev_ws の作戦・L1/L2 の話をそのまま TR に当てはめない (TR は�
 | 入力 | `cmd_vel` (上位の自動走行につなげる) | PS4 を直接読む1ノード (`infinite_ctrl_node`) |
 | 参考になる実機の知見 | — | 操舵と駆動のつながりの打ち消し、原点センサー、DM3519 の発煙 (11/17) と見張り。歯車比などは BR の値なので写さない |
 
-`tr_photo_sensor` の値の決まり (`serial_rx_201` の23番、1 = 入光 / 2 = 遮光) は、BR の ESP32 のファーム
-(ros2can のブランチ `feature/damiao-per-motor-maxvel` の soki_damiao_201) に合わせたもの。TR の ESP32 で使うなら、
-同じ実装を TR 用のファームにも入れ、DEVICE_ID が BR と重ならないようにする (`tr_dokusute.yaml` の `device_id: 201` は【仮置き】)。
+TR の操舵の ESP32 は DEVICE_ID **205** (ros2can `generated_firmware/tr_damiao_205`、2026-11-21)。BR は 201、RobStride は 202、GM6020 は 203 を使う。
+このファームは BR 用の soki_damiao_201 (ros2can のブランチ `feature/damiao-per-motor-maxvel` 版、フォトセンサ入り) の写しで、
+`tr_photo_sensor` の値の決まり (帰還の23番、1 = 入光 / 2 = 遮光) もそれに合わせてある。
 
 ## ノード構成 (`tr_dokusute`)
 
@@ -33,12 +33,12 @@ dev_ws の作戦・L1/L2 の話をそのまま TR に当てはめない (TR は�
 | 計算 | `tr_swerve_kinematics` | `cmd_vel` → ステア角の目標・車輪速度の目標 (有限ステア) |
 | 計算 | `tr_pid` | 汎用PID+フィードフォワード。launchでremapして使う |
 | 計算 | `dob_node` | 外乱オブザーバ (独立。1ユニット試験では使わない。`odom`が要る) |
-| 機構 | `tr_steer_dm2325` | DM2325 ステア。目標角 → ros2can |
+| 機構 | `tr_steer_dm2325` | DM2325 ステア。目標角 → ros2can。起動直後に自動で原点合わせ (フォトセンサのフラグ 64.01mm/直径163mm = 45° を往復で探し、中心を `flag_center_rad` の向きにする。終わるまで目標角を受け付けない。やり直しは `/steer/home`) |
 | 機構 | `tr_drive_735` | マブチ735 駆動。duty → ros2can、エンコーダから速度 |
-| センサ | `tr_photo_sensor` | 操舵の原点のフォトセンサ (serial_rx_201 の23番) → `photo_sensor/blocked`。確認用 |
+| センサ | `tr_photo_sensor` | 操舵の原点のフォトセンサ (serial_rx_205 の23番) → `photo_sensor/blocked`。確認用 |
 
 ```
-joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2325 ⇄ ros2can(201)
+joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2325 ⇄ ros2can(205)
                      ↑ steer/angle ───────────────────────────────┘
                      └ drive/speed_target → tr_pid → drive/duty → tr_drive_735 ⇄ ros2can(駆動)
                                               ↑ drive/speed ───────────┘
@@ -173,7 +173,7 @@ docstring は1行目を空けて書き、要約は `.` で終える)。
 
 - 通信はすべて ros2can (`~/ros2can`、`ros2 run ros2can ros2can --nogui`) 経由。
   `serial_tx_<DEVICE_ID>` / `serial_rx_<DEVICE_ID>` に int16 x 24 スロットを送受信する
-- ステア: DAMIAO DM2325 + DM3520 (ESC)。ESP32 を ros2can の `MODE_DAMIAO` (DEVICE_ID 201) で使う。
+- ステア: DAMIAO DM2325 + DM3520 (ESC)。ESP32 を ros2can の `MODE_DAMIAO` (DEVICE_ID 205) で使う。
   1台6スロット、最大4台。ESCが位置制御を回すので、PCは目標角と速度上限を送るだけ。
   CAN線はDamiao専用 (他モードとCAN IDが衝突する)。
   スロットの単位の正本は ros2can のファーム (`~/ros2can/firmware/xiao-esp32-s3_can2io/src/damiao.cpp`)。
