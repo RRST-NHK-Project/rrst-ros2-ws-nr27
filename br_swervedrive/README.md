@@ -1,11 +1,11 @@
 # br_swervedrive
 
-`br_swervedrive` は BR 担当の本人のパッケージなので、本人の指示なしに名前も中身も変えない (本人の指示で `br_drive` → `br_swervedrive` に改名、2026-11-20)。
+担当は Kaho-YAMAMOTO (BR)。担当者の指示なしに名前も中身も変えない (担当者の指示で `br_drive` → `br_swervedrive` に改名、2026-11-20)。
 
 ## ノード構成 (`br_swervedrive`、BR)
 
 BR の独ステ1ユニットを PS4 で動かす**1ノードだけ**のパッケージ (`infinite_ctrl_node`)。
-`tr_dokusute` と違い、入力・計算・機構を1ノードにまとめている (試験用。本人のパッケージなので分けない)。
+`tr_dokusute` と違い、入力・計算・機構を1ノードにまとめている (試験用。担当者のパッケージなので、指示なしに分けない)。
 仕様の正本は `br_swervedrive/src/infinite_ctrl_node.cpp` の先頭のコメント。定数 (歯車の比・速さ・見張りのしきい値など) は
 `br_swervedrive/include/br_swervedrive/infinite_ctrl_params.hpp` にまとめてある (変えたらビルドし直す)。ここは要点だけ。
 
@@ -49,8 +49,8 @@ joy ─→ infinite_ctrl_node ─ damiao/motor1/cmd (操舵) ─→ damiao_drive
 - `zakinema.h` / `matrix.h` (4輪の運動学) はライブラリ `br_swervedrive_lib` として書き出しているが、今の1輪のノードでは使っていない
 - 速度の上限は3か所にある。上げる時はそろえる:
   1. ESP32 のファーム: ros2can の `feature/damiao-per-motor-maxvel` の表、駆動は 40 rad/s
-  2. `~/rrst-ros2-ws/damiao_ctrl/config/damiao_ctrl.yaml` の `max_vel_per_motor`: [45.6, 40.0]
-     (2026-11-19 に 20 から 40 へ。taiyouss のコミット 7cf6d51)
+  2. rrst-ros2-ws の `damiao_ctrl/config/damiao_ctrl.yaml` の `max_vel_per_motor`: [45.6, 40.0]
+     (2026-11-19 に 20 から 40 へ。taiyouss のコミット 7cf6d51。2026-11-21 時点で `develop` にだけある)
   3. ノードの `kDriverLimitRadps`: 25.0
   
   25 → 30 → 35 → 40 と段階的に上げる予定
@@ -58,7 +58,11 @@ joy ─→ infinite_ctrl_node ─ damiao/motor1/cmd (操舵) ─→ damiao_drive
 ## コマンド
 
 ```bash
-# br_swervedrive (ビルドは Jazzy だけで通る。動かすには ~/rrst-ros2-ws の damiao_ctrl が要る)
+# br_swervedrive (ビルドは Jazzy だけで通る。動かすには rrst-ros2-ws の damiao_ctrl が要る)
+# 先に rrst-ros2-ws をビルドしたワークスペースを source する (下は ~/rrst-ros2-ws に置いた例)
 source ~/rrst-ros2-ws/install/setup.bash && colcon build --packages-select br_swervedrive
 source install/setup.bash
 ```
+
+- damiao_ctrl は rrst-ros2-ws の `develop` の版を使う。`main` の版は速度を 0.001 rad/s/LSB で送り、
+  ros2can のファーム (0.01 rad/s/LSB) と10倍ずれている (2026-11-21 時点)

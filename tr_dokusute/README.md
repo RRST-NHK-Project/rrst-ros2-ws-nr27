@@ -2,7 +2,7 @@
 
 今は**独ステ1ユニットの動作確認**の段階。機能は最小限にとどめる。
 
-こちらは `nr27_br_hw_ctrl` → `br_dokusute` (2026-11-19)
+このパッケージは `nr27_br_hw_ctrl` → `br_dokusute` (2026-11-19)
 → `tr_dokusute` (2026-11-20、機体が TR と分かったため) と改名した。
 
 | | `tr_dokusute` (TR、silby72) | `br_swervedrive` (BR、Kaho-YAMAMOTO) |
@@ -39,17 +39,13 @@ joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2
 - 起動は `ros2 launch tr_dokusute unit_test.launch.py` (ros2can を別ターミナルで先に起動)
 - 設定は `config/tr_dokusute.yaml` (ノード名がキー)
 - 計算の中身はROSに依存しない `swerve_kinematics.hpp/.cpp` に置き、gtestを書く
-- **チーム共通の `common` (`rrst-ros2-ws/common` のコピー) を先に探して使う。** 自作する前に
-  `common/include/common/` に無いか見ること。今使っているのは `common/PID.hpp` の `PIDController`
-  (`tr_pid`)。`common/common.hpp` は存在しない `IK.hpp` を include しているので使わず、
-  必要なヘッダを個別に include する。`PacketController` / `Ros2CanPacketController` は
+- `common` で今使っているのは `common/PID.hpp` の `PIDController` (`tr_pid`)。
+  `PacketController` / `Ros2CanPacketController` は
   DM2325 (MODE_DAMIAO) と MES基板のMD1+ENC1 に対応していないので、`damiao_slots.hpp` と
-  各ノードのスロット番号は自前
+  各ノードのスロット番号は自前 (`common` を先に探す決まりは AGENTS.md)
 - 複数ノードで繰り返す処理は小さなヘッダにして使い回す:
   `latest_value.hpp` (最後に受けた値と時刻。「届かなければ止める」判定)、
   `stop_on_shutdown.hpp` (終了時の停止指令)
-- **機構ノードは「入力が timeout 以上届かなければ止める」を必ず持つ。**
-  上流のノードが落ちても、下流が自分で止まる (停止の責任を1か所に集めない)
 - ユニットを増やすとき: 今は1ユニットなので、機構ノードが `serial_tx_<ID>` の24スロット
   すべてを送っている。複数ユニットで同じIDを共有すると、互いのスロットを0で上書きする。
   その場合は、スロットをまとめて送る専用ノードを挟むこと
@@ -72,10 +68,12 @@ clang-format -i tr_dokusute/src/*.cpp tr_dokusute/include/tr_dokusute/*.hpp tr_d
 
 ## コーディング規約
 
+ここの C++ の規約は `tr_dokusute` に当てはめる。`br_swervedrive/` は自分の `.clang-format` (LLVM 系、インデント4) を持つので、この規約に合わせない。
+
 ### C++: Google C++ Style Guide に従う
 https://google.github.io/styleguide/cppguide.html
 
-- 書式は `.clang-format` (BasedOnStyle: Google) に任せる。C++を変更したら clang-format をかける
+- 書式はリポジトリのルートの `.clang-format` (BasedOnStyle: Google) に任せる。C++を変更したら clang-format をかける
 - 規約は cpplint (Google製、`colcon test` で実行) で確認する。違反を残さない
 - よく効くルール:
   - 命名: 型・関数は `PascalCase`、変数は `snake_case`、クラスのメンバ変数は末尾 `_`、
@@ -84,30 +82,31 @@ https://google.github.io/styleguide/cppguide.html
   - `std::bind` ではなくラムダ、`using namespace` は使わない
   - データを束ねるだけなら `struct` (メンバ末尾 `_` なし)、振る舞いを持つなら `class`
   - 関数は短く、1つの役割にする。長くなったら名前の付いた関数に分ける
-- このリポジトリでの例外 (ROS 2 の慣習に合わせる):
+- このパッケージでの例外 (ROS 2 の慣習に合わせる):
   - 拡張子は `.hpp` / `.cpp`
   - インクルードガードは ament_cpplint の形式 `TR_DOKUSUTE__FILE_NAME_HPP_`
   - 著作権表記のチェック (`legal/copyright`) は、方針が決まるまで外している
 - 動作確認用の簡単なノード (例: `tr_joy_teleop_node.cpp`) は、チームで読み慣れた nr26
-  (`~/rrst-ros2-ws-nr26/nr26_r1_hw_ctrl/src/R1_SwerveDrive.cpp`) の書き方に合わせる:
+  (rrst-ros2-ws-nr26 の `nr26_r1_hw_ctrl/src/R1_SwerveDrive.cpp`) の書き方に合わせる:
   設定値は先頭の `#define`、joy は `ps4_listener_callback` で全ボタンを変数に並べてから使う
   (使わないものはコメントアウト)、`main` で figlet を表示。機能は必要最小限にする
 
 ### コメント
-- 日本語は空白で区切られないので、`.clang-format` で `ReflowComments: false` にしている。
+- 日本語は空白で区切られないので、ルートの `.clang-format` で `ReflowComments: false` にしている。
   コメントの改行は文の切れ目で手で入れる。行末コメントが80文字を超えるなら行の上に書く
 
 ## ハードウェア構成 (コードを読む前に知っておくこと)
 
-- 通信はすべて ros2can (`~/ros2can`、`ros2 run ros2can ros2can --nogui`) 経由。
+- 通信はすべて ros2can (RRST-NHK-Project/ros2can、`ros2 run ros2can ros2can --nogui`) 経由。
   `serial_tx_<DEVICE_ID>` / `serial_rx_<DEVICE_ID>` に int16 x 24 スロットを送受信する
 - ステア: DAMIAO DM2325 + DM3520 (ESC)。ESP32 を ros2can の `MODE_DAMIAO` (DEVICE_ID 205) で使う。
   1台6スロット、最大4台。ESCが位置制御を回すので、PCは目標角と速度上限を送るだけ。
   CAN線はDamiao専用 (他モードとCAN IDが衝突する)。
-  スロットの単位の正本は ros2can のファーム (`~/ros2can/firmware/xiao-esp32-s3_can2io/src/damiao.cpp`)。
+  スロットの単位の正本は ros2can のファーム (ros2can の `firmware/xiao-esp32-s3_can2io/src/damiao.cpp`)。
   速度系は 0.01 rad/s/LSB、位置は 0.001 rad/LSB。
-  `~/rrst-ros2-ws/damiao_ctrl` (slot_layout.hpp / README) は速度を 0.001 と書いていて古いので、
-  参考にしても単位だけは写さない (写すと速度上限が10倍になる。test_damiao_slots で確認している)
+  rrst-ros2-ws の `main` の `damiao_ctrl` (slot_layout.hpp / README) は速度を 0.001 と書いていて古いので、
+  参考にしても単位だけは写さない (写すと速度上限が10倍になる。test_damiao_slots で確認している。
+  `develop` の版は 0.01 に直っている、2026-11-21 時点)
 - 駆動: マブチ735。CAN_HOST 配下の MES 基板 (1ノード5スロット、MD1=local 0, ENC1=local 1)。
   ENC は PCNT が ±32767 でリセットされるので `serial_rx_<ID>_unwrapped` を使う
   (MODE_DAMIAO の位置には `_unwrapped`/`_zeroed` は使えない)

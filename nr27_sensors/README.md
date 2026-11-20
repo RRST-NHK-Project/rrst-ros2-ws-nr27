@@ -3,13 +3,14 @@
 機種: Hokuyo UST-30LX (Ethernet 192.168.0.10)、YDLIDAR TG30 (USBシリアル)、LD19 (USBシリアル) を1台ずつ。
 launch と config だけのパッケージ。ドライバは他のワークスペースに入っていて、**改変しない**:
 
-| 機種 | ドライバ | どこ |
+| 機種 | ドライバ | 置き場所の例 (人による) |
 |---|---|---|
 | LD19 | `ldlidar_component` (ldrobot-lidar-ros2) | `~/ros2_ws` |
 | UST-30LX | `urg_node2` | `~/ros2_ws` |
 | TG30 | `ydlidar_ros2_driver` | `~/ydlidar_ros2_ws` |
 
 ```bash
+# ドライバを入れたワークスペースを先に source する (下は ~/ros2_ws と ~/ydlidar_ros2_ws に入れた例)
 source ~/ros2_ws/install/setup.bash && source ~/ydlidar_ros2_ws/install/setup.bash
 ros2 launch nr27_sensors lidar.launch.py lidars:=ld19,tg30,ust30lx   # 使うものだけ並べる
 ```

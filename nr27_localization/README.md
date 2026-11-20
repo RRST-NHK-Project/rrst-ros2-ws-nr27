@@ -1,6 +1,6 @@
 # 自己位置 (`nr27_localization`)
 
-LiDAR + AMCL (nav2_amcl)。地図は走って作らず、**dev_ws (`~/dev_ws`、本人のシム環境) の world から作ったものを取り込む。**
+LiDAR + AMCL (nav2_amcl)。地図は走って作らず、**dev_ws (RRST-NHK-Project/dev_ws、BR のシム環境) の world から作ったものを取り込む。**
 フィールドの寸法の正本は dev_ws の `make_field.py` (ルールブック V1.1・付録の図面に合わせてある)。nr27 に寸法を書き写さない。
 
 ```bash
@@ -9,7 +9,8 @@ ros2 launch nr27_localization localization.launch.py x:=-4.1 y:=-4.8 yaw:=1.5708
 # dev_ws のシムとつなぐ (先に別端末で: ros2 launch robocon2027_sim sim.launch.py world:=field_2027 drive:=omni
 #   x:=-4.1 y:=-4.8 yaw:=1.5708。dev_ws と nr27 の両方の install を source する)
 ros2 launch nr27_localization localization.launch.py sim:=true x:=-4.1 y:=-4.8 yaw:=1.5708
-# world が変わったら地図を取り込み直してコミットする (引数は床から LiDAR までの高さ、既定 0.185 m)
+# world が変わったら地図を取り込み直してコミットする (引数は床から LiDAR までの高さ、既定 0.185 m。
+#   dev_ws の場所は環境変数 DEV_WS で渡す、既定 ~/dev_ws)
 nr27_localization/scripts/import_dev_ws_maps.sh
 ```
 
