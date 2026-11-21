@@ -11,6 +11,10 @@
 #include <cstddef>
 #include <cstdint>
 
+//制御モード（どちらか一つのみコメントアウトする）
+// #define MODE_ANGLE // 角度制御
+#define MODE_VELOCITY // 速度制御
+
 namespace Infinite_Zakisute {
 
 // ---------------------------------------------------------------------
@@ -37,7 +41,7 @@ constexpr double kDriveAccelMps2 = 1.5; // 加速度の上限[m/s^2]
 // damiao_driver_node のモータ2の速度の上限[rad/s]。ノードの上限はこれを超えないようにする
 // (超えた分はドライバで切られ、R2の奥の方が効かなくなるため)。ドライバの上限を上げたら、ここも変える。
 // ドライバ(damiao_ctrl.yaml の max_vel_per_motor)とESP32のファームの上限は40。それを超えないこと。
-constexpr double kDriverLimitRadps = 25.0;
+constexpr double kDriverLimitRadps = 40.0;
 // 1.5m/s → 車輪 37.5rad/s → モータ 53.8rad/s だが、今はドライバの上限 25.0rad/s(≒0.70m/s)で止まる
 constexpr double kDriveMaxRadps =
     std::min(kDriveMaxMps / kWheelRadiusM * kDriveGear, kDriverLimitRadps);        // 駆動モータの最高速度[rad/s]
@@ -47,7 +51,7 @@ constexpr double kSteerLimitRad = 11.5; // 操舵モータの目標の範囲[rad
                                         // → 車輪の向きでは ±11.5 ÷ 3.77 ≒ ±3.05rad(±175°)
 // 操舵(車輪の向きの値)
 // 車輪の向きを変える速さの上限は、damiao_driver_node のモータ1の上限(45.6rad/s)の何割かで決める
-// 50% = モータ22.8rad/s = 車輪の向き約6.0rad/s(約347°/秒)
+// 80% = モータ36.5rad/s = 車輪の向き約9.7rad/s(約554°/秒)。打ち消しの分も最大で約9.7rad/sになる
 constexpr double kSteerDriverLimitRadps = 45.6; // damiao_driver_node のモータ1の速度の上限[rad/s]
 constexpr double kSteerSpeedRatio = 0.50;       // その何割で回すか
 constexpr double kSteerSpeedRadps =
@@ -69,14 +73,22 @@ constexpr double kStallHoldSec = 0.5;  // これだけ続いたら止める
 // 操舵と駆動のつながりの打ち消し(駆動モータの値)
 constexpr double kCouplingMinRadps = 0.05; // 打ち消しの量がこれ以上の時に駆動を有効にする
 constexpr double kCouplingHoldSec = 0.3;   // 操舵が止まってから、これだけたったら駆動を脱力に戻す
+// 駆動のESCが有効になるのをこれ以上待ったら警告する[s](ふだんは0.5秒ほどで有効になる)
+constexpr double kDriveEnableWarnSec = 1.5;
 
 // ---------------------------------------------------------------------
 // 操舵の制御のしかた【ここで切り替える】(説明はファイルの先頭)
 //   SteerMode::kAngle    : 角度制御。正確。起動時から約±175°まで、届かない向きは車輪を逆転
 //   SteerMode::kVelocity : 速度制御 + ノードの中で位置制御。何周でも回れる(120°を超えたら車輪を逆転)
 // ---------------------------------------------------------------------
-enum class SteerMode { kAngle,
-                       kVelocity };
+
+#if defined(MODE_ANGLE)
+enum class SteerMode {kAngle};
+#elif defined(MODE_VELOCITY)
+enum class SteerMode {kVelocity};
+#elif (defined(MODE_ANGLE)+defined(MODE_VELOCITY) != 1)
+#error "SteerMode is not defined. Define either MODE_ANGLE or MODE_VELOCITY."
+#endif
 constexpr SteerMode kSteerMode = SteerMode::kVelocity;
 constexpr bool kSteerVel = (kSteerMode == SteerMode::kVelocity);
 
@@ -106,5 +118,11 @@ constexpr double kHomingSlowRadps = 0.3;  // 見つけた後、合わせ直す�
 constexpr double kHomingBackoffRad = 1.0 * M_PI / 180.0; // 1°
 constexpr double kHomingSettleSec = 0.15;                // 戻った所で止まって、センサーの値が追いつくのを待つ時間
 constexpr double kHomingTimeoutSec = 20.0;               // これを超えたら失敗(端から端まで約2.5秒)
+constexpr double kOriginPassMinRadps = 0.05;             // 原点の通過のログ: 車輪の向きの速さがこれ未満なら出さない[rad/s]
+// 原点の端を通った時のずれの補正
+constexpr double kOriginCorrectMaxRadps = 1.0; // これより速く通った時は直さない[rad/s、車輪の向き](約57°/s)
+constexpr double kOriginCorrectMaxDeg = 5.0;   // ずれがこれより大きい時は直さない(数え間違いの恐れ)[°]
+// センサーの値の遅れ[s](ファームの確定 + 通信)。0 = 遅れを引かない。実機の「遅れだとすると」の値を見て決める
+constexpr double kOriginDelaySec = 0.0;
 
 } // namespace Infinite_Zakisute

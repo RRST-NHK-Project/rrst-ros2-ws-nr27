@@ -49,6 +49,10 @@ infinite_ctrl_node : BRの独立ステアリング(独ステ)1ユニットをPS4
   見つけた所の車輪の向きを origin_offset_deg として、スティックの「上」を決め直す
   (原点合わせの前は、起動時の向きが「上」)。
   ※センサーの値が来ていない時は始めない。黒線が断線すると「ずっと空」に見え、見つからずに失敗する。
+  原点合わせの後は、センサーの端を通るたびに、数えている位置とのずれを「[原点の通過]」としてログに出す。
+  原点の端を通った時だけ、ゆっくり(kOriginCorrectMaxRadps 以下)で、ずれが kOriginCorrectMaxDeg 以下なら
+  ずれを直す(「[原点の補正]」)。速い時は、センサーの値の遅れの分だけ先で気づくので直さない
+  (遅れを測ったら kOriginDelaySec に入れると、その分を引いて直す)。反対の端は幅を出すだけ。
 
 ■ 操舵と駆動のつながりの打ち消し(drive_coupling)
   駆動の軸は操舵の回転軸の中を通っている(DM-S3519 → 上の歯車2枚(1:1) → 縦の軸 → 傘歯車 → 23:33 → 車輪)。
@@ -59,6 +63,8 @@ infinite_ctrl_node : BRの独立ステアリング(独ステ)1ユニットをPS4
   向きの決め方: 車輪を浮かせて drive_coupling:=1.0 で操舵だけ回し、車輪がほぼ止まっていれば +1.0、
   0 の時より大きく回るなら −1.0(このユニットは −1.0)。
   操舵が止まって kCouplingHoldSec たつと駆動は脱力に戻る。原点合わせの間は打ち消さない。
+  ドライバは「R2の分 + 打ち消しの分」の合計を kDriverLimitRadps で切るので、合計が上限を超えそうな時は
+  R2の分を下げて打ち消しを優先する(速く走りながら操舵を回す時だけ、少し遅くなる)。
 
 ■ 安全のための決まり
   ・駆動は「R2で回す時」と「打ち消す時」だけ有効にし、それ以外(止まっている時、原点合わせの時)は脱力にする。
@@ -224,6 +230,10 @@ public:
     // 角度制御を使ってよいか(モータ内部の位置が分かっていて±12rad以内)
     bool angle_ok() const { return !std::isnan(internal_pos_) && std::abs(internal_pos_) <= 12.0; }
     int number() const { return number_; }
+    // 最後に帰還を受け取ってからの時間[s]
+    double state_age() const {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - last_state_time_).count();
+    }
 
 private:
     int number_;
@@ -392,10 +402,80 @@ private:
             origin_valid_ = false;
             return;
         }
-        origin_on_ = (raw == kOriginDetected);
+        const auto now = std::chrono::steady_clock::now();
+        const bool on = (raw == kOriginDetected);
+        if (origin_ok(now) && on != origin_on_) {
+            origin_pass_log(on); // 切り替わった(センサーの端を通った)
+        }
+        origin_on_ = on;
         origin_valid_ = true;
-        last_origin_time_ = std::chrono::steady_clock::now();
+        last_origin_time_ = now;
         // 受信データ処理ここまで
+    }
+
+    // ===================================================================
+    // 原点センサーの端を通るたびに、数えている位置とのずれをログに出す。
+    //   原点(A) = 原点合わせで「+向きに回してONになった所」。+向きの OFF→ON と −向きの ON→OFF は A。
+    //     A を通った時だけ、ずれを直す(ゆっくり通った時・ずれが小さい時だけ。下の条件)。
+    //   反対の端(B) = A + センサーの幅。+向きの ON→OFF と −向きの OFF→ON は B。
+    //     幅はセンサーの形で変わる(設計の改良中)ので、B は幅をログに出すだけで、直すのには使わない。
+    //   センサーの値は遅れて届く(ファームの確定約15ms + 通信 + 位置は20msごと)ので、回っている時は
+    //   回った向きに少し先で気づく。「遅れだとすると」は ずれ ÷ 速さ。速さを変えても同じ値なら、ずれは遅れだけ。
+    //   位置は、最後に届いた帰還から、その後の時間 × 速さだけ進めて見積もる。
+    // ===================================================================
+    void origin_pass_log(bool on) {
+        if (!started_ || !homed_ || homing_ != Homing::kIdle) {
+            return;
+        }
+        const double wheel_radps = kSteerSign * steer_.velocity() / kSteerGear; // 車輪の向きの速さ(+向きが+)
+        if (std::abs(wheel_radps) < kOriginPassMinRadps) {
+            return; // ほぼ止まっている(端の上で揺れている)時は出さない
+        }
+        const bool plus = wheel_radps > 0.0;
+        const double per_turn = 2.0 * M_PI * kSteerGear; // 車輪1周分の操舵モータの位置[rad]
+        // 位置の帰還は20msごとなので、最後に届いてからの分を速さで足して、端を通った時の位置にする
+        const double pos_now = steer_pos() + steer_.velocity() * std::clamp(steer_.state_age(), 0.0, 0.05);
+        const double from_origin = pos_now - steer_origin_pos_;  // 原点からの操舵モータの位置[rad]
+        const double turns = std::round(from_origin / per_turn); // 原点から何周目か
+        const double deg_per_motor = kSteerSign / kSteerGear * 180.0 / M_PI;
+        const double speed_dps = wheel_radps * 180.0 / M_PI;
+        if (on == plus) {
+            // A: 原点の端。ずれ = 一番近い「原点 + 整数周」からの差
+            const double err_motor = std::remainder(from_origin, per_turn);
+            const double err_deg = err_motor * deg_per_motor;
+            // 遅れの分を差し引いた、本当のずれ。原点合わせの時も kHomingSlowRadps で回って遅れて気づいているので、
+            // 速さの差 × 遅れ だけを引く(kOriginDelaySec が0なら、引かない)
+            const double delay_motor =
+                (steer_.velocity() - kSteerSign * kHomingSlowRadps * kSteerGear) * kOriginDelaySec;
+            const double delta_motor = err_motor - delay_motor;
+            const double delta_deg = delta_motor * deg_per_motor;
+            const bool slow = std::abs(wheel_radps) <= kOriginCorrectMaxRadps;
+            const bool small = std::abs(delta_deg) <= kOriginCorrectMaxDeg;
+            RCLCPP_INFO(get_logger(), "[原点の通過] %s(%s向き・原点の端) %+.0f周目 ずれ%+6.2f°(遅れを引いて%+6.2f°) "
+                                      "速さ%+6.0f°/s(遅れだとすると%+5.0fms) 内部の位置%+.1frad%s",
+                        on ? "OFF→ON" : "ON→OFF", plus ? "+" : "−", turns, err_deg, delta_deg, speed_dps,
+                        err_deg / speed_dps * 1000.0, steer_.internal_pos(),
+                        !slow ? "(速いので直さない)" : "");
+            if (slow && small) {
+                // 原点と「スティックの上」を同じだけずらす。スティックを倒している時は、次の周期で
+                // 正しい向きへ向け直す(ずれは kOriginCorrectMaxDeg 以下なので、小さく動くだけ)
+                steer_origin_pos_ += delta_motor;
+                steer_zero_ += delta_motor;
+                RCLCPP_INFO(get_logger(), "[原点の補正] ずれ%+.2f°を直しました", delta_deg);
+            } else if (slow) {
+                RCLCPP_WARN(get_logger(), "[原点の補正] ずれ%+.2f°が大きすぎる(±%.1f°を超えた)ので直しません。"
+                                          "位置の数え間違いの恐れがあります。△で原点合わせをやり直してください",
+                            delta_deg, kOriginCorrectMaxDeg);
+            }
+        } else {
+            // B: 反対の端。原点から+向きに測った角度 = センサーの幅(遅れの分だけ、+向きでは大きく、−向きでは小さく出る)
+            double width_deg = std::fmod(from_origin * deg_per_motor, 360.0);
+            if (width_deg < 0.0) {
+                width_deg += 360.0;
+            }
+            RCLCPP_INFO(get_logger(), "[原点の通過] %s(%s向き・反対の端) 原点からの幅%6.2f° 速さ%+6.0f°/s 内部の位置%+.1frad",
+                        on ? "OFF→ON" : "ON→OFF", plus ? "+" : "−", width_deg, speed_dps, steer_.internal_pos());
+        }
     }
 
     // 原点センサーの値が使えるか(新しい値が届いているか)
@@ -526,7 +606,8 @@ private:
     void homing_done(double edge_motor_pos) {
         // 見つけた所の車輪の向きが origin_offset になるように、スティックの「上」を決め直す
         steer_zero_ = edge_motor_pos - kSteerSign * kSteerGear * origin_offset_rad_;
-        steer_target_ = edge_motor_pos; // その場で止まる
+        steer_origin_pos_ = edge_motor_pos; // 通るたびのずれの確認に使う
+        steer_target_ = edge_motor_pos;     // その場で止まる
         steer_reverse_ = false;
         homing_ = Homing::kIdle;
         homed_ = true;
@@ -646,19 +727,26 @@ private:
         if (r2_on && std::abs(steer_pos() - steer_target_) / kSteerGear < kAlignTolRad) {
             drive_target = kDriveSign * (steer_reverse_ ? -1.0 : 1.0) * r2_ * kDriveMaxRadps;
         }
-        // 加速度を制限して、指令を急に変えない(前進⇔後退も必ずゆっくり0を通る)
-        const double step = kDriveAccelRadps2 * kPeriodSec;
-        if (drive_target > drive_cmd_ + step) {
-            drive_cmd_ += step;
-        } else if (drive_target < drive_cmd_ - step) {
-            drive_cmd_ -= step;
-        } else {
-            drive_cmd_ = drive_target;
-        }
-        steer_output(kSteerSpeedRadps * kSteerGear); // 速さはモータの値にして送る
-
-        // 操舵と駆動のつながりの打ち消し: 車輪の向きが変わる速さ × drive_coupling を駆動に足す
+        // 加速度を制限して、指令を急に変えない(前進⇔後退も必ずゆっくり0を通る)。
+        // 駆動のESCが有効(状態1)になるまでは0のまま待つ。脱力から有効になるまで0.5秒ほどかかり、
+        // その間に指令だけ上げると、有効になった瞬間に速い指令が入る(暴走の見張りも誤って働く)。
+        // 回している途中で有効でなくなった時も0に戻し、また有効になってから0から上げ直す。
         const auto now = std::chrono::steady_clock::now();
+        const bool drive_ready = drive_.state() == 1;
+        const bool drive_wanted = drive_target != 0.0;
+        if (drive_wanted && !drive_ready) {
+            if (!drive_waiting_) {
+                drive_waiting_ = true;
+                drive_wait_since_ = now;
+            } else if (now - drive_wait_since_ > std::chrono::duration<double>(kDriveEnableWarnSec)) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                                     "駆動のESCが有効になるのを待っています(%.1f秒。状態%d)",
+                                     std::chrono::duration<double>(now - drive_wait_since_).count(), drive_.state());
+            }
+        } else {
+            drive_waiting_ = false;
+        }
+        // 操舵と駆動のつながりの打ち消し: 車輪の向きが変わる速さ × drive_coupling を駆動に足す
         const double steer_wheel_radps = kSteerSign * steer_.velocity() / kSteerGear;
         coupling_cmd_ = use_drive_ ? drive_coupling_ * steer_wheel_radps : 0.0;
         if (std::abs(coupling_cmd_) >= kCouplingMinRadps) {
@@ -667,10 +755,36 @@ private:
         }
         const bool coupling_active = use_drive_ && drive_coupling_ != 0.0 && now < coupling_until_;
 
-        // 駆動は「回す指令がある間(R2を離した後、ゆっくり0に戻るまでを含む)」と
+        // 打ち消しの分の余裕を取る: ドライバは「R2の分 + 打ち消しの分」の合計を kDriverLimitRadps で切るので、
+        // 速く走りながら操舵を回すと打ち消しの分が切られ、車輪の回転がずれる。合計が上限を超えそうな時だけ、
+        // R2の分を下げて打ち消しを優先する(打ち消しが逆向きの時は下げない)。下げる時も加速度の制限で
+        // ゆっくり下げるので、操舵を回し始めてから0.1秒ほどは、打ち消しが少し切られることがある。
+        const double coupling_now = coupling_active ? coupling_cmd_ : 0.0;
+        const double limited_target =
+            std::clamp(drive_target, -kDriverLimitRadps - coupling_now, kDriverLimitRadps - coupling_now);
+        if (limited_target != drive_target) {
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,
+                                 "[駆動] 打ち消しの分(%+.2frad/s)の余裕を取るため、駆動を%+.2f → %+.2frad/sに下げています",
+                                 coupling_now, drive_target, limited_target);
+            drive_target = limited_target;
+        }
+
+        const double step = kDriveAccelRadps2 * kPeriodSec;
+        if (!drive_ready) {
+            drive_cmd_ = 0.0;
+        } else if (drive_target > drive_cmd_ + step) {
+            drive_cmd_ += step;
+        } else if (drive_target < drive_cmd_ - step) {
+            drive_cmd_ -= step;
+        } else {
+            drive_cmd_ = drive_target;
+        }
+        steer_output(kSteerSpeedRadps * kSteerGear); // 速さはモータの値にして送る
+
+        // 駆動は「回したい間(ESCが有効になるのを待つ間と、R2を離した後ゆっくり0に戻るまでを含む)」と
         // 「操舵が回っていて打ち消す間」だけ有効にする。どちらでもなければ脱力にして、
         // 止まったまま力を出し続けないようにする。
-        drive_enabled_ = use_drive_ && (drive_cmd_ != 0.0 || coupling_active);
+        drive_enabled_ = use_drive_ && (drive_wanted || drive_cmd_ != 0.0 || coupling_active);
         if (drive_enabled_) {
             drive_out_ = drive_cmd_ + (coupling_active ? coupling_cmd_ : 0.0);
             drive_.set_velocity(drive_out_);
@@ -829,6 +943,7 @@ private:
             coupling_cmd_ = 0.0;
             coupling_until_ = {};
             drive_enabled_ = false;
+            drive_waiting_ = false;
             stall_watch_ = false;
             was_active_ = false;
             steer_vel_cmd_ = 0.0;
@@ -1004,6 +1119,7 @@ private:
     std::chrono::steady_clock::time_point settle_since_{};
     std::chrono::steady_clock::time_point homing_started_{};
     bool homed_{false};
+    double steer_origin_pos_{0.0};  // 原点(センサーが+向きでONになった所)の操舵モータの位置[rad]
     double origin_offset_rad_{0.0}; // パラメータ origin_offset_deg[rad]
     std::chrono::steady_clock::time_point last_joy_time_{};
     // 操舵・駆動の状態
@@ -1025,8 +1141,10 @@ private:
     std::chrono::steady_clock::time_point created_;
     std::chrono::steady_clock::time_point last_print_{};
     std::chrono::steady_clock::time_point last_drive_print_{};
-    bool drive_was_enabled_{false}; // 前の周期に駆動を回していたか
-    double drive_start_pos_{0.0};   // 駆動を回し始めた時の位置[モータの出口 rad]
+    bool drive_was_enabled_{false};                            // 前の周期に駆動を回していたか
+    bool drive_waiting_{false};                                // 駆動のESCが有効になるのを待っているか
+    std::chrono::steady_clock::time_point drive_wait_since_{}; // 待ち始めた時刻
+    double drive_start_pos_{0.0};                              // 駆動を回し始めた時の位置[モータの出口 rad]
 };
 
 } // namespace Infinite_Zakisute
