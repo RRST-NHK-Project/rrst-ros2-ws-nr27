@@ -82,8 +82,8 @@ class SwerveKinematicsNode : public rclcpp::Node {
     speed_target_pub_->publish(speed_target);
   }
 
-  double module_x_ = 0.25;  // ロボット中心からの位置 [m]
-  double module_y_ = 0.25;
+  double module_x_ = 0.25;  // ロボット中心からの位置 [m] (前が+)
+  double module_y_ = 0.25;  // [m] (左が+)
   double steer_limit_ = M_PI;  // ステアの可動範囲 ±[rad]
   double timeout_ = 0.5;       // [s]
   double target_angle_ = 0.0;  // 最後に出したステア角の目標 [rad]

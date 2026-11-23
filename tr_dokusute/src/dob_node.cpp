@@ -76,9 +76,14 @@ class DisturbanceObserverNode : public rclcpp::Node {
   DisturbanceObserverNode() : Node("disturbance_observer") {
     declare_parameter<double>("control_rate", 20.0);  // [Hz]
     declare_parameter<double>("timeout", 0.5);        // [s]
+    // 3軸 (vx, vy, wz) 分を並べる
+    // 公称モデルの定常ゲイン K [-] (指令1に対して出る速度)
     declare_parameter<std::vector<double>>("gain", {1.0, 1.0, 1.0});
+    // 公称モデルの時定数 T [s]
     declare_parameter<std::vector<double>>("time_constant", {0.1, 0.1, 0.1});
+    // Q フィルタの時定数 tau [s]
     declare_parameter<std::vector<double>>("q_tau", {0.1, 0.1, 0.1});
+    // 補償の上限 [m/s, m/s, rad/s]
     declare_parameter<std::vector<double>>("max_disturbance", {0.5, 0.5, 1.0});
 
     const double rate = get_parameter("control_rate").as_double();

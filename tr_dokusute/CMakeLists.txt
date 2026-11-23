@@ -68,6 +68,9 @@ if(BUILD_TESTING)
   target_include_directories(test_damiao_slots PRIVATE include)
   ament_add_gtest(test_steer_homing test/test_steer_homing.cpp)
   target_include_directories(test_steer_homing PRIVATE include)
+  ament_add_gtest(test_limited_pid test/test_limited_pid.cpp)
+  target_include_directories(test_limited_pid PRIVATE include)
+  ament_target_dependencies(test_limited_pid common)
 
   # copyright: 著作権表記の方針がまだ決まっていないので使わない
   # uncrustify: ROS 2 スタイルを強制し、Google C++ Style と衝突するので使わない

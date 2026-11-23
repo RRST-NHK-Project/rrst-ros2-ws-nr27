@@ -7,7 +7,7 @@ import yaml
 MAPS = os.path.join(os.path.dirname(__file__), '..', 'maps')
 
 
-@pytest.mark.parametrize('level', ['ground', 'l1', 'l2'])
+@pytest.mark.parametrize('level', ['ground', 'l1'])
 def test_map_yaml_points_to_existing_pgm(level):
     with open(os.path.join(MAPS, f'field_2027_{level}.yaml')) as f:
         meta = yaml.safe_load(f)

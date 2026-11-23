@@ -4,7 +4,7 @@
   <name>tr_dokusute</name>
   <version>0.0.0</version>
   <description>NR27 TR hardware control (independent steering swerve drive)</description>
-  <maintainer email="riko26maeda@gmail.com">dev</maintainer>
+  <maintainer email="silby72@users.noreply.github.com">silby72</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

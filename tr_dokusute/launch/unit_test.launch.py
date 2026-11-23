@@ -1,14 +1,17 @@
 """
 独ステ1ユニットの試験用 launch.
 
-使い方:
+使い方 (実機を動かすので、非常停止できる人が機体のそばで実行する):
     # 別ターミナルで先に: ros2 run ros2can ros2can --nogui
     ros2 launch tr_dokusute unit_test.launch.py
 
+起動直後に tr_steer_dm2325 が操舵を回して原点合わせをする (フォトセンサのフラグを探す)。
+終わるまでスティックを倒しても操舵は動かない。失敗したらログを見て
+    ros2 service call /steer/home std_srvs/srv/Trigger
+でやり直す (センサが使えないときは、車輪を手で前に揃えて /steer/set_zero)。
+
 R1を押している間だけ動く。左スティックで平行移動、右スティック左右で旋回。
 速さはスティックの倒し量に比例する (上限は tr_joy_teleop_node.cpp の #define)。
-起動したら車輪を手で前に揃えて
-    ros2 service call /steer/set_zero std_srvs/srv/Trigger
 
 つなぎ方:
     joy -> cmd_vel -> tr_swerve_kinematics
