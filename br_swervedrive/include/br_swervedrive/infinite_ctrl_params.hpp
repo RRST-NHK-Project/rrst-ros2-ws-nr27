@@ -42,7 +42,7 @@ constexpr double kDriveAccelMps2 = 1.5; // 加速度の上限[m/s^2]
 // (超えた分はドライバで切られ、R2の奥の方が効かなくなるため)。ドライバの上限を上げたら、ここも変える。
 // ドライバ(damiao_ctrl.yaml の max_vel_per_motor)とESP32のファームの上限は40。それを超えないこと。
 constexpr double kDriverLimitRadps = 40.0;
-// 1.5m/s → 車輪 37.5rad/s → モータ 53.8rad/s だが、今はドライバの上限 25.0rad/s(≒0.70m/s)で止まる
+// 1.5m/s → 車輪 37.5rad/s → モータ 53.8rad/s だが、今はドライバの上限 40.0rad/s(≒1.12m/s)で止まる
 constexpr double kDriveMaxRadps =
     std::min(kDriveMaxMps / kWheelRadiusM * kDriveGear, kDriverLimitRadps);        // 駆動モータの最高速度[rad/s]
 constexpr double kDriveAccelRadps2 = kDriveAccelMps2 / kWheelRadiusM * kDriveGear; // ≒53.8rad/s^2
@@ -51,7 +51,7 @@ constexpr double kSteerLimitRad = 11.5; // 操舵モータの目標の範囲[rad
                                         // → 車輪の向きでは ±11.5 ÷ 3.77 ≒ ±3.05rad(±175°)
 // 操舵(車輪の向きの値)
 // 車輪の向きを変える速さの上限は、damiao_driver_node のモータ1の上限(45.6rad/s)の何割かで決める
-// 80% = モータ36.5rad/s = 車輪の向き約9.7rad/s(約554°/秒)。打ち消しの分も最大で約9.7rad/sになる
+// 50% = モータ22.8rad/s = 車輪の向き約6.0rad/s(約347°/秒)。打ち消しの分も最大で約6.0rad/sになる
 constexpr double kSteerDriverLimitRadps = 45.6; // damiao_driver_node のモータ1の速度の上限[rad/s]
 constexpr double kSteerSpeedRatio = 0.50;       // その何割で回すか
 constexpr double kSteerSpeedRadps =
