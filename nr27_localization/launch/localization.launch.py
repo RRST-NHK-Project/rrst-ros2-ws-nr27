@@ -6,7 +6,7 @@ LiDAR と既知のフィールド地図で自己位置を出す launch (map_serv
 dev_ws のシム (先に別端末で sim.launch.py world:=field_2027 drive:=omni を上げる):
     ros2 launch nr27_localization localization.launch.py sim:=true x:=-4.1 y:=-4.8 yaw:=1.5708
 
-地図は maps/field_2027_<level>.yaml (level = ground / l1 / l2)。dev_ws の world から
+地図は maps/field_2027_<level>.yaml (level = ground / l1)。dev_ws の world から
 scripts/import_dev_ws_maps.sh で取り込んだもの。座標も dev_ws と同じ (原点はフィールド中央、
 赤が西 (-x)、北が +y。赤のスタートゾーンは (-4.1, -4.8) で北向き)。
 出力: TF map -> odom、/amcl_pose。
@@ -28,7 +28,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
-LEVELS = ('ground', 'l1', 'l2')
+# TR が動けるのはグラウンドとトランスファー (L1 と同じ高さ) まで (ルールブック【3.2.1】)
+LEVELS = ('ground', 'l1')
 
 
 def arg(context, name):
@@ -108,7 +109,7 @@ def generate_launch_description():
         SetEnvironmentVariable('ROS_AUTOMATIC_DISCOVERY_RANGE', EnvironmentVariable(
             'ROS_AUTOMATIC_DISCOVERY_RANGE', default_value='LOCALHOST')),
         DeclareLaunchArgument('level', default_value='ground',
-                              description='いる階: ground / l1 / l2 (階ごとに地図が違う)'),
+                              description='いる階: ground / l1 (トランスファー) (階ごとに地図が違う)'),
         DeclareLaunchArgument('x', default_value='-4.1',
                               description='初期姿勢 [m]。既定は赤のスタートゾーン'),
         DeclareLaunchArgument('y', default_value='-4.8', description='初期姿勢 [m]'),

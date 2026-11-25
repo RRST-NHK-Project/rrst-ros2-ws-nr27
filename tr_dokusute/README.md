@@ -39,7 +39,8 @@ joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2
 - 起動は `ros2 launch tr_dokusute unit_test.launch.py` (ros2can を別ターミナルで先に起動)
 - 設定は `config/tr_dokusute.yaml` (ノード名がキー)
 - 計算の中身はROSに依存しない `swerve_kinematics.hpp/.cpp` に置き、gtestを書く
-- `common` で今使っているのは `common/PID.hpp` の `PIDController` (`tr_pid`)。
+- `common` で今使っているのは `common/PID.hpp` の `PIDController` (`tr_pid`。I 項だけに別の上限を付ける
+  `limited_pid.hpp` で包んでいる)。
   `PacketController` / `Ros2CanPacketController` は
   DM2325 (MODE_DAMIAO) と MES基板のMD1+ENC1 に対応していないので、`damiao_slots.hpp` と
   各ノードのスロット番号は自前 (`common` を先に探す決まりは AGENTS.md)
@@ -52,34 +53,29 @@ joy → cmd_vel → tr_swerve_kinematics ─ steer/angle_target → tr_steer_dm2
 
 ## コマンド
 
+ビルド・テストの手順、書式 (clang-format は変えたファイルにだけかける)、lint の決まりはルートの `AGENTS.md`。
+このパッケージに固有なのは次だけ。
+
 ```bash
-# ビルド (ワークスペースルートで)
-# common はこのワークスペースにコピーしてあるので --base-paths は要らない
+# common はこのワークスペースに写してあるので --base-paths は要らない
 colcon build --packages-up-to tr_dokusute
-source install/setup.bash
-
-# テスト (gtest + cpplint + flake8/pep257 など)
+# テストは gtest (運動学・スロット・原点合わせ) + cpplint + flake8/pep257 など
 colcon test --packages-select tr_dokusute
-colcon test-result --verbose --test-result-base build/tr_dokusute
-
-# C++ の整形 (.clang-format = Google)
-clang-format -i tr_dokusute/src/*.cpp tr_dokusute/include/tr_dokusute/*.hpp tr_dokusute/test/*.cpp
 ```
 
-## コーディング規約
-
-ここの C++ の規約は `tr_dokusute` に当てはめる。`br_swervedrive/` は自分の `.clang-format` (LLVM 系、インデント4) を持つので、この規約に合わせない。
+## コーディング規約 (このパッケージに固有の分)
 
 ### C++: Google C++ Style Guide に従う
 https://google.github.io/styleguide/cppguide.html
 
-- 書式はリポジトリのルートの `.clang-format` (BasedOnStyle: Google) に任せる。C++を変更したら clang-format をかける
-- 規約は cpplint (Google製、`colcon test` で実行) で確認する。違反を残さない
+`br_swervedrive/` は自分の `.clang-format` (LLVM 系、インデント4) を持つので、ここの規約に合わせない。
+
+- 規約は cpplint (Google製、`colcon test` で実行) で確認する
 - よく効くルール:
   - 命名: 型・関数は `PascalCase`、変数は `snake_case`、クラスのメンバ変数は末尾 `_`、
     定数は `kPascalCase`、名前空間は `snake_case`
   - 1行80文字、インデント2スペース、`public:` は1スペース下げる
-  - `std::bind` ではなくラムダ、`using namespace` は使わない
+  - `std::bind` ではなくラムダ (下の nr26 に合わせたノードは除く)、`using namespace` は使わない
   - データを束ねるだけなら `struct` (メンバ末尾 `_` なし)、振る舞いを持つなら `class`
   - 関数は短く、1つの役割にする。長くなったら名前の付いた関数に分ける
 - このパッケージでの例外 (ROS 2 の慣習に合わせる):
@@ -88,11 +84,11 @@ https://google.github.io/styleguide/cppguide.html
   - 著作権表記のチェック (`legal/copyright`) は、方針が決まるまで外している
 - 動作確認用の簡単なノード (例: `tr_joy_teleop_node.cpp`) は、チームで読み慣れた nr26
   (rrst-ros2-ws-nr26 の `nr26_r1_hw_ctrl/src/R1_SwerveDrive.cpp`) の書き方に合わせる:
-  設定値は先頭の `#define`、joy は `ps4_listener_callback` で全ボタンを変数に並べてから使う
+  設定値は先頭の `#define`、joy は `ps4_listener_callback` (`std::bind`) で全ボタンを変数に並べてから使う
   (使わないものはコメントアウト)、`main` で figlet を表示。機能は必要最小限にする
 
 ### コメント
-- 日本語は空白で区切られないので、ルートの `.clang-format` で `ReflowComments: false` にしている。
+- ルートの `.clang-format` は `ReflowComments: false` (日本語は空白で区切られず、自動で折り返すと文の途中で切れるため)。
   コメントの改行は文の切れ目で手で入れる。行末コメントが80文字を超えるなら行の上に書く
 
 ## ハードウェア構成 (コードを読む前に知っておくこと)

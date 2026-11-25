@@ -4,7 +4,7 @@
   <name>nr27_sensors</name>
   <version>0.0.0</version>
   <description>NR27 LiDAR bringup (LD19, YDLIDAR TG30, Hokuyo UST-30LX). Launch and config only.</description>
-  <maintainer email="riko26maeda@gmail.com">dev</maintainer>
+  <maintainer email="silby72@users.noreply.github.com">silby72</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

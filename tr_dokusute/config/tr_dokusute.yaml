@@ -48,5 +48,5 @@ tr_pid:
     kp: 0.0              # 初めは0 (フィードフォワードだけ)。エンコーダが合ってから上げる
     ki: 0.0
     kd: 0.0
-    integral_limit: 50.0
+    integral_limit: 50.0  # 【仮置き】I 項の上限 [duty]。引っかかって溜まった I 項で飛び出さないように
     output_limit: 255.0

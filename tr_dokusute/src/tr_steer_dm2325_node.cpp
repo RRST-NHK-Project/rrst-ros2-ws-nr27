@@ -284,8 +284,8 @@ class DmSteerNode : public rclcpp::Node {
   double vel_limit_ = 5.0;  // POS_VEL の速度上限 [rad/s, 出力軸]
   double timeout_ = 0.5;    // [s]
 
-  // 原点合わせで探す範囲の端がこれを超えたら始めない。ファームは内部の位置が
-  // ±12rad を超えると角度制御を拒否する
+  // 原点合わせで探す範囲の端がこれを超えたら始めない [rad, 出力軸]。
+  // ファームは内部の位置が ±12rad を超えると角度制御を拒否する
   static constexpr double kHomingPositionLimit = 12.0;
 
   double position_ = 0.0;  // DMの位置帰還 [rad, 出力軸]
