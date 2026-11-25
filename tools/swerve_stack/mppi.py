@@ -5,8 +5,11 @@
   入力  : 機体速度指令 u
   1. ステア : 目標角 = resolve(atan2(モジュール速度(u)), delta)
               delta は角速度上限 delta_dot_max で目標へ近づく
-  2. 速度   : nu' = nu + clip((c*u - nu)/tau_v, +-a_max) dt
+  2. 速度   : nu' = nu + clip((c*u - nu)/tau_v, +-a_max) dt          (profile='trapezoid')
+              nu, a = vector_step(nu/a_max, a/a_max, c*u/a_max, J_n)   (profile='scurve')
               c = mean_i max(0, cos(目標角 - delta_i))   向きが合っていないと進めない
+              scurve は実機側 (stack.py) の速度整形と同じ関数・同じ A・J_n を使う。
+              加速度 a も状態に持ち、初期値は実機側の速度整形の今の加速度。
   3. 姿勢   : p' = p + R(psi) nu_xy dt,  psi' = psi + omega dt
 
 コスト（各ステップの和 + 終端）
@@ -29,6 +32,7 @@ import math
 import numpy as np
 
 from kinematics import module_velocities, resolve_angles
+from motion_profile import vector_step
 
 
 class SwerveMPPI:
@@ -42,6 +46,9 @@ class SwerveMPPI:
         horizon: int = 25,
         dt_s: float = 0.04,
         seed: int = 0,
+        profile: str = "trapezoid",
+        accel_max=None,
+        jerk_norm_per_s: float = 5.0,
     ):
         self.positions = positions
         self.limit = steer_limit_rad
@@ -54,7 +61,11 @@ class SwerveMPPI:
 
         self.sigma = np.array([0.15, 0.15, 0.15])
         self.u_max = np.array([2.0, 2.0, 3.0])
-        self.a_max = np.array([3.0, 3.0, 6.0])
+        self.a_max = np.array([3.0, 3.0, 6.0]) if accel_max is None else np.asarray(accel_max, float)
+        if profile not in ("trapezoid", "scurve"):
+            raise ValueError(f"未知の profile: {profile}")
+        self.profile = profile
+        self.jerk_norm = jerk_norm_per_s
         self.tau_v = 0.04
         self.steer_rate_max = 8.0
         self.lam = 20.0
@@ -73,7 +84,8 @@ class SwerveMPPI:
     def _ref_horizon(self, t0: float) -> np.ndarray:
         return np.array([self.ref_fn(t0 + (k + 1) * self.dt) for k in range(self.T)])
 
-    def solve(self, t_s: float, pos, psi, twist_b, delta) -> np.ndarray:
+    def solve(self, t_s: float, pos, psi, twist_b, delta, accel=None) -> np.ndarray:
+        """accel: 実機側の速度整形の今の加速度 (scurve のときの初期値。None なら 0)."""
         refs = self._ref_horizon(t_s)                       # (T, 6)
         if self.U is None:
             self.U = refs[:, 3:6].copy()
@@ -96,6 +108,7 @@ class SwerveMPPI:
         nu = np.tile(twist_b, (K, 1))
         dl = np.tile(delta, (K, 1))
         u_prev = np.tile(self.last_u, (K, 1))
+        acc_n = np.tile(np.zeros(3) if accel is None else np.asarray(accel) / self.a_max, (K, 1))
         cost = np.zeros(K)
         step_rate = self.steer_rate_max * self.dt
         lim_in = self.limit - self.lim_margin
@@ -119,10 +132,14 @@ class SwerveMPPI:
                 cost += self.w_align * np.sum(1.0 - align, axis=1)
             else:
                 c = 1.0
-            acc = (c * u - nu) / self.tau_v
-            ratio = np.max(np.abs(acc) / self.a_max, axis=1, keepdims=True)
-            acc = acc / np.maximum(ratio, 1.0)          # 向きを保ったまま加速度を制限（実機側と同じ）
-            nu = nu + acc * self.dt
+            if self.profile == "scurve":
+                nu_n, acc_n = vector_step(nu / self.a_max, acc_n, c * u / self.a_max, self.jerk_norm, self.dt)
+                nu = nu_n * self.a_max
+            else:
+                acc = (c * u - nu) / self.tau_v
+                ratio = np.max(np.abs(acc) / self.a_max, axis=1, keepdims=True)
+                acc = acc / np.maximum(ratio, 1.0)          # 向きを保ったまま加速度を制限（実機側と同じ）
+                nu = nu + acc * self.dt
             cs, sn = np.cos(ps), np.sin(ps)
             px = px + (cs * nu[:, 0] - sn * nu[:, 1]) * self.dt
             py = py + (sn * nu[:, 0] + cs * nu[:, 1]) * self.dt

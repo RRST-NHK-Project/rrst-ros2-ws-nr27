@@ -1,12 +1,16 @@
 """制御スタック全体: MPPI (25 Hz) -> 速度整形 -> 運動学 -> 各軸 FF+PID+DOB (1 kHz).
 
-    MPPI ----- u (機体速度指令) ----> 速度レートリミッタ -> nu_ref
+    MPPI ----- u (機体速度指令) ----> 速度整形 (台形 or S 字) -> nu_ref, a_ref
                                                             |
                                                SwerveKinematics
                                          (ステア目標角, 駆動速度) x 4
                                               |                 |
                                SteerAxisController x4   DriveAxisController x4
                               (参照軌道+FF+PID+DOB)     (FF+PI+DOB, 坂の重力FF)
+
+profile='scurve' のとき、速度整形を motion_profile.VectorJerkLimitedFilter (ジャーク制限つき、
+向きを保つ) に替え、MPPI の予測モデルにも同じ A・J_n をかける (docs/scurve_prompt.md §3.5・§4)。
+steer_jerk_rad_s3 を与えると、ステアの参照軌道もジャーク制限つきにする。
 """
 
 import math
@@ -16,6 +20,7 @@ import numpy as np
 
 from drive_axis import DriveAxisConfig, DriveAxisController
 from kinematics import SwerveKinematics
+from motion_profile import VectorJerkLimitedFilter
 from mppi import SwerveMPPI
 from plant import GRAVITY_MPS2
 from steer_axis import SteerAxisConfig, SteerAxisController
@@ -35,18 +40,24 @@ class NominalModel:
 class SwerveController:
     def __init__(self, positions, steer_limit_rad, ref_fn, nominal: NominalModel,
                  use_ff: bool, use_dob: bool, steer_aware_mppi: bool = True,
-                 mppi_period_s: float = 0.04, mppi_seed: int = 0):
+                 mppi_period_s: float = 0.04, mppi_seed: int = 0, profile: str = "trapezoid",
+                 jerk_norm_per_s: float = 5.0, steer_jerk_rad_s3=None):
         self.nom = nominal
         self.positions = positions
+        self.acc_max = np.array([3.0, 3.0, 6.0])
+        # J_n = J/A [1/s]。J = A f_n (揺れの固有振動数) なら J_n = f_n。5 なら立ち上げ 0.2 s
+        self.profile = profile
+        self.shaper = VectorJerkLimitedFilter(self.acc_max, jerk_norm_per_s) if profile == "scurve" else None
+        self.a_ref = np.zeros(3)
         self.mppi = SwerveMPPI(positions, steer_limit_rad, ref_fn, steer_aware=steer_aware_mppi,
-                               seed=mppi_seed)
+                               seed=mppi_seed, profile=profile, accel_max=self.acc_max,
+                               jerk_norm_per_s=jerk_norm_per_s)
         self.mppi_period_s = mppi_period_s
         self._next_mppi_t = 0.0
         self.arrive_tol_m = 0.02
         self.arrive_tol_rad = math.radians(2.0)
         self.u_cmd = np.zeros(3)
         self.nu_ref = np.zeros(3)
-        self.acc_max = np.array([3.0, 3.0, 6.0])
         self.kin = SwerveKinematics(positions, steer_limit_rad)
 
         wn = 30.0
@@ -56,6 +67,7 @@ class SwerveController:
                 j_nom_kgm2=js, b_nom_nms=nominal.steer_damping_nms,
                 torque_max_nm=1.5, kp=js * wn * wn, ki=4.0, kd=2.0 * js * wn,
                 integral_limit_nm=0.5, vel_max_rad_s=8.0, acc_max_rad_s2=80.0,
+                jerk_max_rad_s3=steer_jerk_rad_s3,
                 use_ff=use_ff, use_dob=use_dob, dob_cutoff_rad_s=200.0, dob_limit_nm=0.6))
             for _ in range(4)
         ]
@@ -73,7 +85,8 @@ class SwerveController:
     def update(self, t_s, dt_s, pos, psi, twist_b, delta, ddelta, wheel_speed, slope_meas_rad):
         # 1. 上位計画 (MPPI) は低い周期で
         if t_s >= self._next_mppi_t - 1e-9:
-            self.u_cmd = self.mppi.solve(t_s, pos, psi, twist_b, delta)
+            self.u_cmd = self.mppi.solve(t_s, pos, psi, twist_b, delta,
+                                         accel=self.a_ref if self.shaper is not None else None)
             self._next_mppi_t += self.mppi_period_s
             # 到着判定: 目標が止まっていて誤差が許容内なら、補正をやめて停止を保つ。
             # これが無いと、MPPI の小さな補正指令でステアが振り回され続ける。
@@ -89,10 +102,16 @@ class SwerveController:
         # 2. 速度指令を加速度制限つきで整形（FF に使う加速度もここで決まる）
         # 軸ごとに clip すると速度ベクトルの向きが歪む（vx が加速中に vy だけ先に到達する）。
         # 独ステでは向き = ステア角なので、差分ベクトル全体を同じ倍率で縮める。
-        step = self.acc_max * dt_s
-        diff = self.u_cmd - self.nu_ref
-        ratio = np.max(np.abs(diff) / step)
-        self.nu_ref = self.nu_ref + (diff / ratio if ratio > 1.0 else diff)
+        if self.shaper is not None:
+            # S 字: ジャークも制限し、向きを保つ。a_ref は S 字の加速度そのもの (§4)
+            self.nu_ref, self.a_ref = self.shaper.update(self.u_cmd, dt_s)
+        else:
+            step = self.acc_max * dt_s
+            diff = self.u_cmd - self.nu_ref
+            ratio = np.max(np.abs(diff) / step)
+            new_ref = self.nu_ref + (diff / ratio if ratio > 1.0 else diff)
+            self.a_ref = (new_ref - self.nu_ref) / dt_s
+            self.nu_ref = new_ref
 
         # 3. 逆運動学 + 角度解決
         steer_target, drive_mps = self.kin.command(self.nu_ref, delta)

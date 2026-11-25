@@ -22,6 +22,7 @@
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 from dob import DisturbanceObserver
 from feedforward import MotorFeedforward
@@ -44,6 +45,7 @@ class SteerAxisConfig:
     # 参照軌道
     vel_max_rad_s: float = 10.0
     acc_max_rad_s2: float = 100.0
+    jerk_max_rad_s3: Optional[float] = None   # None: 台形 (ジャーク無制限)、値: S 字 (ref_profile.py)
     # 各機能のオン/オフ（比較実験用）
     use_ff: bool = True
     use_dob: bool = True
@@ -54,7 +56,8 @@ class SteerAxisConfig:
 class SteerAxisController:
     def __init__(self, cfg: SteerAxisConfig):
         self.cfg = cfg
-        self.ref = TrapezoidalReference(cfg.vel_max_rad_s, cfg.acc_max_rad_s2)
+        self.ref = TrapezoidalReference(cfg.vel_max_rad_s, cfg.acc_max_rad_s2,
+                                        jerk_max_rad_s3=cfg.jerk_max_rad_s3)
         self.ff = MotorFeedforward(cfg.j_nom_kgm2, cfg.b_nom_nms, cfg.coulomb_nom_nm)
         self.pid = PID(cfg.kp, cfg.ki, cfg.kd, cfg.integral_limit_nm)
         self.dob = DisturbanceObserver(
