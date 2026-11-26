@@ -1,0 +1,50 @@
+# nr27 wall_detection_node (UST-30LX-X01 / urg_node2)
+# 座標はすべて base frame (x=前, y=左) 基準。角度は deg。
+wall_detection_node:
+  ros__parameters:
+    scan_topic: scan            # urg_node2 の既定
+    odom_topic: odom
+    base_frame: ""              # mount_* を入れたら base_link にする
+    publish_debug: true
+
+    # ── 取り付け ── (実測して埋める)
+    mount_x: 0.0
+    mount_y: 0.0
+    mount_yaw_deg: 0.0
+    upside_down: false
+
+    # ── 狙う壁 ──
+    # 0 = 前の壁に正対 / 90 = 左の壁と平行 / -90 = 右の壁と平行
+    # 走行中に ros2 param set で切り替え可 (切り替え時に追従状態はリセット)
+    target_normal_deg: 0.0
+    normal_tolerance_deg: 35.0  # 凹形の側面 (~90deg ずれ) を弾く
+    fov_half_deg: 60.0          # target 方向 ±これだけ見る
+    range_min: 0.05
+    range_max: 5.0              # UST-30LX は 30m まで届くので外周の壁を切る
+    use_roi: false
+    roi_x_min: -5.0
+    roi_x_max: 5.0
+    roi_y_min: -5.0
+    roi_y_max: 5.0
+
+    # ── RANSAC ── 0.25deg 分解能なので 1m 先で約 4.4mm 間隔
+    ransac_iterations: 100
+    inlier_threshold: 0.03
+    min_inliers: 15
+    min_inlier_ratio: 0.15
+    min_segment_length: 0.30    # 柱・他ロボットなど短い面を弾く
+    max_candidates: 4
+
+    # ── ウォームスタート ──
+    warm_start: true
+    warm_start_gate_scale: 1.5
+    warm_start_max_frames: 20   # 40Hz で 0.5s ごとに全探索で検算
+
+    # ── 時系列フィルタ ── 時定数 [s] なのでスキャン周期が変わっても挙動同じ
+    use_odom_prediction: false  # odom があるなら true 推奨 (回転中の遅れが消える)
+    angle_time_constant: 0.03
+    distance_time_constant: 0.05
+    max_angle_jump_deg: 10.0
+    max_distance_jump: 0.20
+    max_consecutive_rejects: 5
+    lost_timeout: 0.25

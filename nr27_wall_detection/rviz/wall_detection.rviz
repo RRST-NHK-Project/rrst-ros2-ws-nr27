@@ -1,0 +1,104 @@
+# nr27_wall_detection の判定を見る rviz の設定。
+# 固定フレームは launch の fixed_frame (既定 laser = urg_node2 の frame_id)。
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Help Height: 0
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.5
+    Tree Height: 600
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid (0.5m)
+      Enabled: true
+      Cell Size: 0.5
+      Plane Cell Count: 20
+      Color: 160; 160; 164
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/Axes
+      Name: LiDAR Axes
+      Enabled: true
+      Reference Frame: <Fixed Frame>
+      Length: 0.3
+      Radius: 0.015
+      Value: true
+    # 生のスキャン (全周)。灰色
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan (raw)
+      Enabled: true
+      Topic:
+        Value: /scan
+        Depth: 5
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Color Transformer: FlatColor
+      Color: 150; 150; 150
+      Size (m): 0.02
+      Style: Flat Squares
+      Value: true
+    # 視野・距離・ROI を通った点 (RANSAC に入る点)。黄緑
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Filtered points
+      Enabled: true
+      Topic:
+        Value: /wall_detection/filtered_points
+        Depth: 5
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Color Transformer: FlatColor
+      Color: 180; 255; 60
+      Size (m): 0.03
+      Style: Flat Squares
+      Value: true
+    # 視野 (黄)・候補 (水色 OK / 赤 NG + 理由)・観測 (緑 採用 / 橙 外れ値)・
+    # 推定の法線 (白矢印)・状態の文字
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Wall detection
+      Enabled: true
+      Namespaces:
+        wall_detection: true
+      Topic:
+        Value: /wall_detection/markers
+        Depth: 5
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: laser
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
+      Near Clip Distance: 0.01
+      Scale: 120
+      Target Frame: <Fixed Frame>
+      Angle: 1.5708
+      X: 1.0
+      Y: 0
+      Value: TopDownOrtho (rviz_default_plugins)
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400
+  X: 0
+  Y: 0
