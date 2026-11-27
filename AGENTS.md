@@ -14,12 +14,14 @@ Ubuntu 24.04 + ROS 2 Jazzy が前提。colcon はリポジトリのルートで�
 | `nr27_sensors` | TR | silby72 | LiDAR 3機種の launch と config | `nr27_sensors/README.md` |
 | `nr27_localization` | TR | silby72 | AMCL と既知の地図 | `nr27_localization/README.md` |
 | `common` | 共通 | 【要確認】 | rrst-ros2-ws の `common` の写し（ヘッダだけ） | — |
+| `br_ros2can_gateway` | BR | Nzomu | BR の PC と ros2can の間の仲介ノードと4輪独立ステアの逆運動学。dev_ws（非公開）から移した | `br_ros2can_gateway/README.md` |
 
 - TR と BR を取り違えない。BR のシム（RRST-NHK-Project/dev_ws、非公開）の作戦や L1・L2 の話を TR に持ち込まない。TR が動けるのはグラウンドとトランスファーまで（ルールブック【3.2.1】）。
 - 他の担当のパッケージは、担当者の指示なしに名前・中身・設定を変えない。直す必要があれば、理由と影響を書いて担当者に聞く。
 - `common/` はここで直さない。CI で rrst-ros2-ws が無くても `tr_dokusute` をビルドできるように写したもの（2026-11-20）なので、元の rrst-ros2-ws で直してから写し直す。
 - `nr27_localization/maps/` は `nr27_localization/scripts/import_dev_ws_maps.sh` が作る生成物なので、手で編集しない。フィールドの寸法の正本は dev_ws の `make_field.py` にあり、nr27 には書き写さない。
 - ドライバ（ldlidar・urg_node2・ydlidar）、ros2can、damiao_ctrl は別のリポジトリにある。ここから改変しない。
+- BR の足回りのモータ（ESP32 201・204）は `br_ros2can_gateway` がスロットを直に書き、damiao_ctrl を通さない（2026-11-27）。`br_swervedrive` は試験用なので、`br_ros2can_gateway` と同時に上げない（同じ `serial_tx_201` に publish する）。
 - 関連リポジトリを手元のどこに置くかは人によって違う（`~/ros2_ws/src` の人も `~/rrst-ros2-ws` の人もいる）。見つからなければ場所を聞き、パスを推測で書かない。
 
 ## コマンド
@@ -33,7 +35,7 @@ colcon test --packages-select <パッケージ>
 colcon test-result --verbose --test-result-base build/<パッケージ>
 ```
 
-- CI（`.github/workflows/main_jazzy_build_and_test.yml`）は `main` への push と PR でビルドだけを回す。テストは手元で回す。
+- CI（`.github/workflows/main_jazzy_build_and_test.yml`）は、`main`・`develop` への push と `main` への PR でビルドだけを回す（`develop` への PR では回らない）。テストは手元で回す。
 - ビルドは Jazzy と rosdep で入る依存だけで通る。実行するときは、`br_swervedrive` なら rrst-ros2-ws の damiao_ctrl、`nr27_sensors` なら各ドライバのワークスペースを先に source する。
 - Windows など colcon を動かせない環境では、確かめられた範囲と「未検証」の項目を報告に書く。
 
@@ -69,7 +71,9 @@ AI が自分で実行しない操作。コマンドを示し、非常停止で�
 
 - commit・push・PR の作成・merge は、頼まれたときだけ行う。
 - 作業の前に `git status --short --branch` でブランチと未コミットの変更を見る。自分が作っていない変更は消さず、戻さず、報告する。
-- `main` に直接 push しない。作業ブランチ（`feature/<パッケージ>-<内容>`、`fix/…`、`docs/…`）から `main` への PR にする。【チームで決定】
+- `develop` を統合用のブランチにする。作業ブランチ（`feature/<パッケージ>-<内容>`、`fix/…`、`docs/…`）は `develop` から切り、`develop` への PR にする。【チームで決定、2026-11-27】
+- `main` には動作確認できた版だけを上げる。`develop` から `main` への PR にし、何で確かめたか（テスト／シム／実機）を PR の説明に書く。【チームで決定、2026-11-27】
+- `main` に直接 push しない。
 - force push、`git reset --hard`、履歴の書き換え、ブランチの削除はしない。
 - コミットメッセージは日本語の短い1行にする。
 - 1つの作業ツリーで2つの AI に同時に書かせない。並行するなら worktree かクローンを分ける。
